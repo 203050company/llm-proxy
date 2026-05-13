@@ -108,6 +108,8 @@ function Dashboard() {
   const update = useUpdateMessage();
   const { onLogout } = useDashboardAuthCtx();
   const [showModal, setShowModal] = useState(false);
+  const [showAdd, setShowAdd] = useState(false);
+  const [addProvider, setAddProvider] = useState<"codex" | "gemini" | null>(null);
   const hash = useHash();
   const errorCount = useErrorLogsCount();
 
@@ -125,7 +127,10 @@ function Dashboard() {
   return (
     <div class="min-h-screen flex flex-col bg-slate-50 dark:bg-bg-dark">
       <Header
-        onAddAccount={accounts.startAdd}
+        onAddAccount={() => {
+          setAddProvider(null);
+          setShowAdd(true);
+        }}
         onCheckUpdate={update.checkForUpdate}
         onOpenUpdateModal={() => setShowModal(true)}
         checking={update.checking}
@@ -141,12 +146,28 @@ function Dashboard() {
       <main class="flex-grow px-4 md:px-8 lg:px-40 py-8 flex justify-center">
         <div class="flex flex-col w-full max-w-[960px]">
           <AddAccount
-            visible={accounts.addVisible}
-            onCancel={accounts.cancelAdd}
-            onSubmitRelay={accounts.submitRelay}
+            visible={showAdd || accounts.addVisible || geminiAccounts.addVisible}
+            provider={addProvider}
+            onChooseProvider={setAddProvider}
+            onStartCodex={accounts.startAdd}
+            onStartGemini={geminiAccounts.startAdd}
+            onCancel={() => {
+              setShowAdd(false);
+              setAddProvider(null);
+              accounts.cancelAdd();
+              geminiAccounts.cancelAdd();
+            }}
+            onSubmitRelay={async (provider, callbackUrl) => {
+              if (provider === "codex") {
+                await accounts.submitRelay(callbackUrl);
+              } else {
+                await geminiAccounts.submitRelay(callbackUrl);
+              }
+            }}
             onAddByRefreshToken={accounts.addByRefreshToken}
-            addInfo={accounts.addInfo}
-            addError={accounts.addError}
+            onImportGeminiCli={geminiAccounts.importCli}
+            addInfo={accounts.addInfo || geminiAccounts.addInfo}
+            addError={accounts.addError || geminiAccounts.addError}
           />
 
           <TabBar activeHash={activeTab} />

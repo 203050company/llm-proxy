@@ -145,7 +145,7 @@ function renderModelUsage(
           <div key={row.model}>
             <div class="flex items-center justify-between gap-3 mb-1">
               <span class="font-mono text-[0.72rem] text-slate-600 dark:text-text-main truncate" title={row.model}>
-                {row.model}
+                {row.model === "All Gemini models" ? t("allGeminiModels") : row.model}
               </span>
               <span class={`font-medium whitespace-nowrap ${usageTextColor(row)}`}>
                 {row.hasQuota ? `${row.graphPercent}% ${t("used")}` : `${row.graphPercent}%`}
@@ -158,7 +158,9 @@ function renderModelUsage(
               />
             </div>
             <div class="mt-1 flex items-center justify-between gap-2 text-[0.7rem] text-slate-400 dark:text-text-dim">
-              <span>{formatNumber(row.totalTokens)} tok · {formatNumber(row.requestCount)} req</span>
+              <span>
+                {formatNumber(row.totalTokens)} {t("tokensShort")} · {formatNumber(row.requestCount)} {t("requestsShort")}
+              </span>
               {resetAt && (
                 <span class="flex items-center gap-1">
                   <svg class="size-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
@@ -178,13 +180,9 @@ function renderModelUsage(
           aria-expanded={isExpanded}
           class="text-[0.72rem] text-slate-400 dark:text-text-dim hover:text-primary"
         >
-          {isExpanded ? "Show fewer models" : (
-            <>
-              +
-              {compactRows.hiddenCount}
-              {" models"}
-            </>
-          )}
+          {isExpanded
+            ? t("showFewerModels")
+            : t("moreModels", { count: compactRows.hiddenCount })}
         </button>
       )}
     </div>

@@ -20,6 +20,7 @@ const keys = [
   "geminiSettings",
   "geminiSettingsDescription",
   "geminiOAuthEnabled",
+  "geminiRefreshEnabled",
   "geminiCredentialsPath",
   "geminiCodeAssistEndpoint",
   "geminiApiVersion",
@@ -29,6 +30,12 @@ const keys = [
   "geminiApiKeyPriority",
   "geminiPriorityApiKey",
   "geminiPriorityOAuth",
+  "geminiRoutingSummary",
+  "applyToGeminiCli",
+  "applyToGeminiCliBadge",
+  "applyToGeminiCliConfirm",
+  "applyToGeminiCliSuccess",
+  "applyToGeminiCliFailed",
 ] as const;
 
 describe("remaining Gemini UI translations", () => {
@@ -43,7 +50,10 @@ describe("remaining Gemini UI translations", () => {
   it("uses Korean text for Gemini dashboard labels", () => {
     expect(translations.ko.geminiSettings).toBe("Gemini 설정");
     expect(translations.ko.geminiOAuthEnabled).toBe("Gemini OAuth 활성화");
+    expect(translations.ko.geminiRefreshEnabled).toBe("갱신 활성화");
     expect(translations.ko.geminiApiKeys).toBe("Gemini API 키");
+    expect(translations.ko.geminiRoutingSummary).toBe("모델 라우팅");
+    expect(translations.ko.applyToGeminiCli).toBe("Gemini CLI에서 사용");
     expect(translations.ko.geminiAddStep1).toContain("Google OAuth");
   });
 });

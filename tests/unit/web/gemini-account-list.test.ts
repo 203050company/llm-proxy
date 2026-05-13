@@ -47,6 +47,8 @@ describe("GeminiAccountList", () => {
     expect(SOURCE).toContain("toggleExpandedUsage");
     expect(SOURCE).toContain("aria-expanded={isExpanded}");
     expect(SOURCE).toContain("compactRows.hiddenCount");
-    expect(SOURCE).toContain("Show fewer models");
+    expect(SOURCE).toContain('t("showFewerModels")');
+    expect(SOURCE).toContain('t("moreModels"');
+    expect(SOURCE).not.toContain("Show fewer models");
   });
 });
