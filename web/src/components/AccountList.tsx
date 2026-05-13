@@ -61,7 +61,7 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
   const [viewMode, setViewMode] = useState<AccountViewMode>(() => {
     const storage = getBrowserStorage();
     const saved = storage?.getItem(VIEW_MODE_STORAGE_KEY);
-    return saved === "list" ? "list" : "grid";
+    return saved === "grid" ? "grid" : "list";
   });
   const [refreshingExpired, setRefreshingExpired] = useState(false);
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
@@ -284,34 +284,6 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
         {onExport && onImport && (
           <AccountImportExport onExport={onExport} onImport={onImport} selectedIds={selectedIds} />
         )}
-        <div class="inline-flex overflow-hidden rounded-lg border border-gray-200 dark:border-border-dark">
-          <button
-            type="button"
-            onClick={() => setViewMode("grid")}
-            title={t("gridView")}
-            aria-label={t("gridView")}
-            class={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
-              viewMode === "grid"
-                ? "bg-primary-container text-primary"
-                : "text-slate-500 dark:text-text-dim hover:bg-slate-100 dark:hover:bg-border-dark"
-            }`}
-          >
-            {t("gridView")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("list")}
-            title={t("listView")}
-            aria-label={t("listView")}
-            class={`px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-gray-200 dark:border-border-dark ${
-              viewMode === "list"
-                ? "bg-primary-container text-primary"
-                : "text-slate-500 dark:text-text-dim hover:bg-slate-100 dark:hover:bg-border-dark"
-            }`}
-          >
-            {t("listView")}
-          </button>
-        </div>
         {/* Select all */}
         {accounts.length > 0 && (
           <button
@@ -368,7 +340,7 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
         )}
         {/* Pagination — right side */}
         {!loading && displayAccounts.length > PAGE_SIZE && (
-          <div class="flex items-center gap-2 ml-auto pl-3 border-l border-gray-200 dark:border-border-dark">
+          <div class="flex items-center gap-2 pl-3 border-l border-gray-200 dark:border-border-dark">
             <span class="text-xs text-slate-400 dark:text-text-dim tabular-nums">
               {Math.min(visibleCount, displayAccounts.length)} / {displayAccounts.length}
             </span>
@@ -389,6 +361,34 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
             )}
           </div>
         )}
+        <div class="inline-flex ml-auto overflow-hidden rounded-lg border border-gray-200 dark:border-border-dark">
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            title={t("gridView")}
+            aria-label={t("gridView")}
+            class={`px-2.5 py-1.5 text-xs font-medium transition-colors ${
+              viewMode === "grid"
+                ? "bg-primary-container text-primary"
+                : "text-slate-500 dark:text-text-dim hover:bg-slate-100 dark:hover:bg-border-dark"
+            }`}
+          >
+            {t("gridView")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("list")}
+            title={t("listView")}
+            aria-label={t("listView")}
+            class={`px-2.5 py-1.5 text-xs font-medium transition-colors border-l border-gray-200 dark:border-border-dark ${
+              viewMode === "list"
+                ? "bg-primary-container text-primary"
+                : "text-slate-500 dark:text-text-dim hover:bg-slate-100 dark:hover:bg-border-dark"
+            }`}
+          >
+            {t("listView")}
+          </button>
+        </div>
       </div>
       {/* Health check result banner */}
       {healthResult && (

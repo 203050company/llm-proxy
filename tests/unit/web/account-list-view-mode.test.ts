@@ -8,11 +8,13 @@ const ASSETS_DIR = resolve(PUBLIC_DIR, "assets");
 const LIST_ITEM_SOURCE = resolve(__dirname, "../../../web/src/components/AccountOverviewListItem.tsx");
 const CARD_SOURCE = resolve(__dirname, "../../../web/src/components/AccountCard.tsx");
 const LOG_PANEL_SOURCE = resolve(__dirname, "../../../web/src/components/AccountLogPanel.tsx");
+const ACCOUNT_LIST_SOURCE = resolve(__dirname, "../../../web/src/components/AccountList.tsx");
 
 let js = "";
 let listItemSource = "";
 let cardSource = "";
 let logPanelSource = "";
+let accountListSource = "";
 
 beforeAll(() => {
   if (!existsSync(ASSETS_DIR)) {
@@ -26,12 +28,28 @@ beforeAll(() => {
   listItemSource = readFileSync(LIST_ITEM_SOURCE, "utf-8");
   cardSource = readFileSync(CARD_SOURCE, "utf-8");
   logPanelSource = readFileSync(LOG_PANEL_SOURCE, "utf-8");
+  accountListSource = readFileSync(ACCOUNT_LIST_SOURCE, "utf-8");
 });
 
 describe("account overview view mode", () => {
   it("includes grid/list view labels in the built dashboard", () => {
     expect(js).toContain("Grid view");
     expect(js).toContain("List view");
+  });
+
+  it("defaults the account overview to list view unless grid is saved", () => {
+    expect(accountListSource).toContain('return saved === "grid" ? "grid" : "list";');
+  });
+
+  it("places the grid/list toggle after the filter and expired refresh actions", () => {
+    const viewToggleIndex = accountListSource.indexOf('aria-label={t("gridView")}');
+    const statusFilterIndex = accountListSource.indexOf('{/* Status filter dropdown */}');
+    const refreshExpiredIndex = accountListSource.indexOf('{/* Refresh expired tokens */}');
+
+    expect(statusFilterIndex).toBeGreaterThan(-1);
+    expect(refreshExpiredIndex).toBeGreaterThan(-1);
+    expect(viewToggleIndex).toBeGreaterThan(refreshExpiredIndex);
+    expect(viewToggleIndex).toBeGreaterThan(statusFilterIndex);
   });
 
   it("includes compact usage labels required by list view", () => {
