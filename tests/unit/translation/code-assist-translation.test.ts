@@ -178,6 +178,40 @@ describe("Code Assist translation", () => {
     ]);
   });
 
+  it("uses the matched function_call name on Gemini function responses", () => {
+    const req: CodexResponsesRequest = {
+      model: "gemini-3.1-pro",
+      input: [
+        { role: "user", content: "check status" },
+        {
+          type: "function_call",
+          call_id: "toolu_01",
+          name: "Bash",
+          arguments: "{\"cmd\":\"/home/ber/llm-proxy/scripts/claude-gemini-model-status.sh\"}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "toolu_01",
+          output: "Gemini session\nActual: gemini-3.1-pro",
+        },
+      ],
+      stream: true,
+      store: false,
+    };
+
+    const out = translateCodexToCodeAssistRequest(req, {
+      projectId: "project-1",
+      sessionId: "session-1",
+      userPromptId: "prompt-1",
+    });
+
+    expect(out.request.contents).toEqual([
+      { role: "user", parts: [{ text: "check status" }] },
+      { role: "model", parts: [{ functionCall: { name: "Bash", args: { cmd: "/home/ber/llm-proxy/scripts/claude-gemini-model-status.sh" } } }] },
+      { role: "user", parts: [{ functionResponse: { name: "Bash", response: { output: "Gemini session\nActual: gemini-3.1-pro" } } }] },
+    ]);
+  });
+
   it("maps public Gemini aliases to Code Assist preview model IDs", () => {
     const baseReq: CodexResponsesRequest = {
       model: "gemini-3.1-pro",

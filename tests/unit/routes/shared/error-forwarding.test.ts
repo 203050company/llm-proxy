@@ -6,6 +6,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
 import type { ProxyRequest } from "@src/routes/shared/proxy-handler.js";
 import { createMockFormatAdapter } from "@helpers/format-adapter.js";
+import {
+  clearSessionRoutingRecords,
+  getLatestSessionRouting,
+} from "@src/services/session-routing-state.js";
 
 // ── Mocks ────────────────────────────────────────────────────────────
 
@@ -129,6 +133,7 @@ describe("handleDirectRequest error forwarding", () => {
   beforeEach(() => {
     mockUpstreamCreate = null;
     recordedStreamCloseEvents.length = 0;
+    clearSessionRoutingRecords();
     vi.clearAllMocks();
   });
 
@@ -290,6 +295,44 @@ describe("handleDirectRequest error forwarding", () => {
       path: "/v1/responses",
       model: "gpt-4o",
       detail: "direct stream died",
+    });
+  });
+
+  it("records successful direct routing metadata for on-demand model lookups", async () => {
+    const app = new Hono();
+    const upstream = createMockUpstream({
+      tag: "gemini-oauth",
+      getRoutingInfo: vi.fn(() => ({
+        model: "gemini-3.1-flash-lite",
+        accountId: "gemini-account-2",
+        accountEmail: "two@example.com",
+      })),
+    });
+    const baseReq = createDefaultRequest();
+    const req = {
+      ...baseReq,
+      clientConversationId: "session-1",
+      model: "gemini-3.1-pro",
+      codexRequest: { ...baseReq.codexRequest, model: "gemini-3.1-pro" },
+    };
+    const fmt = createMockFormatAdapter();
+
+    app.post("/test", (c) =>
+      handleDirectRequest({ c, upstream: upstream as never, req, fmt }),
+    );
+
+    const res = await app.request("/test", { method: "POST" });
+    expect(res.status).toBe(200);
+
+    const record = getLatestSessionRouting({ sessionId: "session-1", provider: "gemini" });
+    expect(record).toMatchObject({
+      sessionId: "session-1",
+      provider: "gemini-oauth",
+      requestedModel: "gemini-3.1-pro",
+      actualModel: "gemini-3.1-flash-lite",
+      accountId: "gemini-account-2",
+      accountEmail: "two@example.com",
+      status: 200,
     });
   });
 });

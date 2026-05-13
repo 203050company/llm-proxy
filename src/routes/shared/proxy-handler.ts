@@ -42,6 +42,7 @@ import { deriveStableConversationKey } from "./stable-conversation-key.js";
 import { computeVariantHash } from "./variant-hash.js";
 import { getWsPool } from "../../proxy/ws-pool.js";
 import type { WsPoolContext } from "../../proxy/codex-api.js";
+import { recordSessionRouting } from "../../services/session-routing-state.js";
 
 /** Data prepared by each route after parsing and translating the request. */
 export interface ProxyRequest {
@@ -1143,6 +1144,7 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
   c.req.raw.signal.addEventListener("abort", () => abortController.abort(), { once: true });
 
   const requestId = c.get("requestId") ?? randomUUID().slice(0, 8);
+  const requestedModel = req.codexRequest.model;
   const fallbackNotices: string[] = [];
 
   const logDirectAttempt = (
@@ -1177,6 +1179,16 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
       try {
         const response = await upstream.createResponse({ ...req.codexRequest }, abortController.signal);
         logDirectAttempt(startMs, response.status);
+        const routingInfo = upstream.getRoutingInfo?.();
+        recordSessionRouting({
+          sessionId: req.clientConversationId ?? null,
+          provider: upstream.tag,
+          requestedModel,
+          actualModel: routingInfo?.model ?? req.codexRequest.model,
+          accountId: routingInfo?.accountId ?? apiKeyEntryId ?? null,
+          accountEmail: routingInfo?.accountEmail ?? null,
+          status: response.status,
+        });
         return { ok: true, response };
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Upstream request failed";

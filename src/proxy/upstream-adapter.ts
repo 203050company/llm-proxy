@@ -8,6 +8,12 @@
 
 import type { CodexResponsesRequest, CodexSSEEvent } from "./codex-types.js";
 
+export interface UpstreamRoutingInfo {
+  model?: string | null;
+  accountId?: string | null;
+  accountEmail?: string | null;
+}
+
 export interface UpstreamAdapter {
   /** Short identifier used in logs (e.g. "codex", "openai", "anthropic"). */
   readonly tag: string;
@@ -27,6 +33,8 @@ export interface UpstreamAdapter {
   recordEmptyResponse?(): void;
   /** Optional hook to clear retry hints after a response produced content. */
   recordSuccessfulResponse?(): void;
+  /** Optional diagnostic hook describing the last concrete upstream route. */
+  getRoutingInfo?(): UpstreamRoutingInfo;
   /**
    * Parse the upstream SSE response into a stream of Codex-normalized events.
    * Each adapter normalizes its native event format to CodexSSEEvent.

@@ -15,6 +15,7 @@ import { createUsageStatsRoutes } from "./admin/usage-stats.js";
 import { createLogRoutes } from "./admin/logs.js";
 import { createErrorLogRoutes } from "./admin/error-logs.js";
 import { createCodexCliAuthRoutes } from "./admin/codex-cli-auth.js";
+import { createSessionRoutingRoutes } from "./admin/session-routing.js";
 import type { UsageStatsStore } from "../auth/usage-stats.js";
 import type { ProxyPool } from "../proxy/proxy-pool.js";
 
@@ -62,6 +63,7 @@ export function createWebRoutes(
   app.route("/", createLogRoutes());
   app.route("/", createErrorLogRoutes());
   app.route("/", createCodexCliAuthRoutes(accountPool));
+  app.route("/", createSessionRoutingRoutes());
 
   return app;
 }

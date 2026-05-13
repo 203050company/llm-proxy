@@ -54,6 +54,7 @@ function codexPartToGemini(part: CodexContentPart): GeminiPart {
 
 function inputItemsToGeminiContents(input: CodexInputItem[]): GeminiContent[] {
   const contents: GeminiContent[] = [];
+  const functionNamesByCallId = new Map<string, string>();
 
   for (const item of input) {
     if ("role" in item) {
@@ -67,6 +68,7 @@ function inputItemsToGeminiContents(input: CodexInputItem[]): GeminiContent[] {
         contents.push({ role: geminiRole, parts: item.content.map(codexPartToGemini) });
       }
     } else if (item.type === "function_call") {
+      functionNamesByCallId.set(item.call_id, item.name);
       const fnCallPart: GeminiFunctionCallPart = {
         functionCall: {
           name: item.name,
@@ -84,7 +86,7 @@ function inputItemsToGeminiContents(input: CodexInputItem[]): GeminiContent[] {
     } else if (item.type === "function_call_output") {
       const fnRespPart: GeminiFunctionResponsePart = {
         functionResponse: {
-          name: "",  // Gemini doesn't require name on response; use empty
+          name: functionNamesByCallId.get(item.call_id) ?? fallbackFunctionResponseName(item.call_id),
           response: { output: item.output },
         },
       };
@@ -98,6 +100,13 @@ function inputItemsToGeminiContents(input: CodexInputItem[]): GeminiContent[] {
   }
 
   return contents;
+}
+
+function fallbackFunctionResponseName(callId: string): string {
+  const cleaned = callId.replace(/[^A-Za-z0-9_.-]/g, "_");
+  if (!cleaned) return "tool_result";
+  if (/^[A-Za-z_]/.test(cleaned)) return cleaned;
+  return `tool_${cleaned}`;
 }
 
 function convertToolsToGemini(tools: unknown[]): GeminiTool[] {

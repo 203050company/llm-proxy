@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { GeminiAccountEntry } from "../auth/gemini-types.js";
-import type { UpstreamAdapter } from "./upstream-adapter.js";
+import type { UpstreamAdapter, UpstreamRoutingInfo } from "./upstream-adapter.js";
 import type { CodexResponsesRequest, CodexSSEEvent } from "./codex-types.js";
 import { CodexApiError } from "./codex-types.js";
 import { parseSSEStream } from "./codex-sse.js";
@@ -57,6 +57,7 @@ export class GeminiCodeAssistUpstream implements UpstreamAdapter {
   readonly tag = "gemini-oauth" as const;
   private currentModel: string | null = null;
   private currentAccountId: string | null = null;
+  private currentAccountEmail: string | null = null;
   private readonly emptyResponseAccountIds = new Set<string>();
 
   constructor(private readonly options: GeminiCodeAssistOptions) {}
@@ -69,6 +70,7 @@ export class GeminiCodeAssistUpstream implements UpstreamAdapter {
     for (;;) {
       attemptedAccountIds.add(account.id);
       this.currentAccountId = account.id;
+      this.currentAccountEmail = account.email;
 
       const url = `${this.options.endpoint.replace(/\/+$/, "")}/${this.options.apiVersion}:streamGenerateContent?alt=sse`;
       const body = translateCodexToCodeAssistRequest(req, {
@@ -148,6 +150,14 @@ export class GeminiCodeAssistUpstream implements UpstreamAdapter {
 
   recordSuccessfulResponse(): void {
     this.emptyResponseAccountIds.clear();
+  }
+
+  getRoutingInfo(): UpstreamRoutingInfo {
+    return {
+      model: this.currentModel,
+      accountId: this.currentAccountId,
+      accountEmail: this.currentAccountEmail,
+    };
   }
 
   private async resolveInitialAccount(

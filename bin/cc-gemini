@@ -5,20 +5,20 @@ PORT=8080
 BASE_URL="http://localhost:$PORT"
 MODEL="gemini-3.1-pro" # Real model name
 
+# Get the real directory of this script, following symlinks
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do
+    DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+    SOURCE="$(readlink "$SOURCE")"
+    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
+
 # --- Check and Start Proxy ---
 if ! curl -s "http://localhost:$PORT/health" > /dev/null; then
     echo "Proxy server is not responding at port $PORT. Starting via docker-compose..."
-    
-    # Get the real directory of this script, following symlinks
-    SOURCE="${BASH_SOURCE[0]}"
-    while [ -h "$SOURCE" ]; do
-        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-        SOURCE="$(readlink "$SOURCE")"
-        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-    done
-    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-    PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
-    
+
     cd "$PROJECT_ROOT" || exit 1
     docker compose up -d
     
@@ -81,7 +81,7 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="gemini-3.1-flash-lite[1m]"
 
 echo "Starting Claude Code session with model: $MODEL"
 CLAUDE_ARGS=()
-if [ "${CC_GEMINI_BARE:-1}" != "0" ]; then
+if [ "${CC_GEMINI_BARE:-0}" != "0" ]; then
     case " $* " in
         *" --bare "*) ;;
         *) CLAUDE_ARGS+=(--bare) ;;
