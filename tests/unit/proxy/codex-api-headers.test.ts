@@ -396,5 +396,24 @@ describe("codex-api headers", () => {
 
       expect(transport.post).not.toHaveBeenCalled();
     });
+
+    it("WS handshake 401 is surfaced for account rotation instead of falling back to HTTP", async () => {
+      const { CodexApiError } = await import("@src/proxy/codex-api.js");
+      mockCreateWebSocketResponse.mockRejectedValue(
+        new Error("Unexpected server response: 401"),
+      );
+
+      const api = await createApi();
+      await expect(
+        api.createResponse(makeRequest({ useWebSocket: true })),
+      ).rejects.toMatchObject({
+        status: 401,
+      });
+
+      await expect(
+        api.createResponse(makeRequest({ useWebSocket: true })),
+      ).rejects.toBeInstanceOf(CodexApiError);
+      expect(transport.post).not.toHaveBeenCalled();
+    });
   });
 });

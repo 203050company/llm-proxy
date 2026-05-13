@@ -2,33 +2,55 @@
 /* eslint-disable */
 /* prettier-ignore */
 
-/* Modified dummy for Gemini CLI environment */
+const { existsSync } = require("fs");
+const { join } = require("path");
 
-const { existsSync, readFileSync } = require('fs')
-const { join } = require('path')
+const { platform, arch } = process;
 
-const { platform, arch } = process
-
-let nativeBinding = null
-
-// Try original logic... (omitted for brevity, let's just try to load or dummy)
-try {
-  if (platform === 'linux' && arch === 'x64') {
-     // skip original complex check and try to load any available linux-x64
+function bindingCandidates() {
+  if (platform === "linux" && arch === "x64") {
+    return ["codex-tls.linux-x64-gnu.node", "codex-tls.linux-x64-musl.node"];
   }
-} catch (e) {}
+  if (platform === "linux" && arch === "arm64") {
+    return ["codex-tls.linux-arm64-gnu.node", "codex-tls.linux-arm64-musl.node"];
+  }
+  if (platform === "darwin" && arch === "arm64") {
+    return ["codex-tls.darwin-arm64.node"];
+  }
+  if (platform === "darwin" && arch === "x64") {
+    return ["codex-tls.darwin-x64.node"];
+  }
+  if (platform === "win32" && arch === "x64") {
+    return ["codex-tls.win32-x64-msvc.node"];
+  }
+  if (platform === "win32" && arch === "arm64") {
+    return ["codex-tls.win32-arm64-msvc.node"];
+  }
+  return [];
+}
 
-if (!nativeBinding) {
-  console.warn("[Native] Using dummy HTTP transport (native addon not found)");
-  nativeBinding = {
-    httpGet: async () => ({ status: 500, body: '{"error":"Native addon not found"}' }),
-    httpPost: async () => ({ status: 500, body: '{"error":"Native addon not found"}' }),
-    httpPostStream: async function* () { yield '{"error":"Native addon not found"}'; }
+let nativeBinding = null;
+const loadErrors = [];
+
+for (const filename of bindingCandidates()) {
+  const bindingPath = join(__dirname, filename);
+  if (!existsSync(bindingPath)) continue;
+  try {
+    nativeBinding = require(bindingPath);
+    break;
+  } catch (err) {
+    loadErrors.push(`${filename}: ${err && err.message ? err.message : String(err)}`);
   }
 }
 
-const { httpGet, httpPost, httpPostStream } = nativeBinding
+if (!nativeBinding) {
+  const candidates = bindingCandidates().join(", ") || `${platform}-${arch}`;
+  const suffix = loadErrors.length ? ` Load errors: ${loadErrors.join("; ")}` : "";
+  throw new Error(`Native addon not found for ${platform}-${arch}. Checked: ${candidates}.${suffix}`);
+}
 
-module.exports.httpGet = httpGet
-module.exports.httpPost = httpPost
-module.exports.httpPostStream = httpPostStream
+const { httpGet, httpPost, httpPostStream } = nativeBinding;
+
+module.exports.httpGet = httpGet;
+module.exports.httpPost = httpPost;
+module.exports.httpPostStream = httpPostStream;

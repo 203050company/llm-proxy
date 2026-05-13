@@ -42,6 +42,17 @@ function normalizeServiceTierForUpstream(serviceTier: string | null | undefined)
   return serviceTier === "fast" ? "priority" : serviceTier;
 }
 
+function extractRotatableWebSocketHandshakeStatus(err: unknown): number | null {
+  const msg = err instanceof Error ? err.message : String(err);
+  const match = msg.match(/Unexpected server response:\s*(\d{3})/i);
+  if (!match) return null;
+
+  const status = Number.parseInt(match[1], 10);
+  return status === 401 || status === 402 || status === 403 || status === 429
+    ? status
+    : null;
+}
+
 // Re-export types from codex-types.ts for backward compatibility
 export type {
   CodexResponsesRequest,
@@ -351,6 +362,10 @@ export class CodexApi {
           throw err;
         }
         const msg = err instanceof Error ? err.message : String(err);
+        const handshakeStatus = extractRotatableWebSocketHandshakeStatus(err);
+        if (handshakeStatus != null) {
+          throw new CodexApiError(handshakeStatus, msg);
+        }
         if (normalizedRequest.previous_response_id) {
           console.warn(
             `[CodexApi] WebSocket 失败（${msg}），previous_response_id 不能安全降级到 HTTP SSE`,
