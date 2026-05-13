@@ -49,8 +49,12 @@ export function createGeminiAuthRoutes(
       return c.json({ error: "Gemini OAuth is disabled" }, 403);
     }
     const originalHost = c.req.header("host") || `localhost:${config.server.port}`;
-    const session = createGeminiOAuthSession(originalHost);
-    return c.json({ authUrl: session.authUrl, state: session.state });
+    try {
+      const session = createGeminiOAuthSession(originalHost);
+      return c.json({ authUrl: session.authUrl, state: session.state });
+    } catch (err) {
+      return c.json({ error: errorMessage(err) }, 500);
+    }
   });
 
   app.post("/auth/gemini/code-relay", async (c) => {

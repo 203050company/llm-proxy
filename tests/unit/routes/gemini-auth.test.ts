@@ -6,22 +6,27 @@ import { GeminiAccountPool } from "@src/auth/gemini-account-pool.js";
 import type { GeminiAccountEntry } from "@src/auth/gemini-types.js";
 import { createGeminiAuthRoutes } from "@src/routes/gemini-auth.js";
 
+const mockConfig = vi.hoisted(() => ({
+  gemini: {
+    oauth_enabled: true,
+    oauth_client_id: "client-test.apps.googleusercontent.com",
+    oauth_client_secret: null as string | null,
+    oauth_auth_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+    oauth_token_endpoint: "https://oauth2.googleapis.com/token",
+    oauth_userinfo_endpoint: "https://www.googleapis.com/oauth2/v2/userinfo",
+    oauth_callback_host: "127.0.0.1",
+    oauth_callback_path: "/oauth2callback",
+    credentials_path: "~/.gemini/oauth_creds.json",
+    project_id: "project-test",
+    refresh_enabled: true,
+    refresh_margin_seconds: 300,
+  },
+}));
+
 vi.mock("@src/config.js", () => ({
   getConfig: () => ({
     server: { port: 8080 },
-    gemini: {
-      oauth_client_id: "client-test.apps.googleusercontent.com",
-      oauth_client_secret: null,
-      oauth_auth_endpoint: "https://accounts.google.com/o/oauth2/v2/auth",
-      oauth_token_endpoint: "https://oauth2.googleapis.com/token",
-      oauth_userinfo_endpoint: "https://www.googleapis.com/oauth2/v2/userinfo",
-      oauth_callback_host: "127.0.0.1",
-      oauth_callback_path: "/oauth2callback",
-      credentials_path: "~/.gemini/oauth_creds.json",
-      project_id: "project-test",
-      refresh_enabled: true,
-      refresh_margin_seconds: 300,
-    },
+    gemini: { ...mockConfig.gemini },
   }),
 }));
 
@@ -85,6 +90,8 @@ describe("Gemini auth routes", () => {
   beforeEach(() => {
     saved = [];
     tempDir = null;
+    mockConfig.gemini.oauth_enabled = true;
+    mockConfig.gemini.oauth_client_id = "client-test.apps.googleusercontent.com";
     fakeTokenManager.ensureFreshAccount.mockClear();
     fakeTierFetcher.mockClear();
     pool = new GeminiAccountPool({
@@ -109,6 +116,19 @@ describe("Gemini auth routes", () => {
     expect(res.status).toBe(200);
     expect(body.authUrl).toContain("accounts.google.com");
     expect(body.state).toMatch(/^[a-f0-9]+$/);
+  });
+
+  it("POST /auth/gemini/login-start returns a JSON error when OAuth client id is missing", async () => {
+    mockConfig.gemini.oauth_client_id = "";
+    const app = createGeminiAuthRoutes(pool, undefined, fakeTierFetcher);
+    const res = await app.request("/auth/gemini/login-start", { method: "POST" });
+    const text = await res.text();
+
+    expect(res.status).toBe(500);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(JSON.parse(text)).toEqual({
+      error: "Gemini OAuth client id is not configured. Set gemini.oauth_client_id in data/local.yaml or GEMINI_OAUTH_CLIENT_ID.",
+    });
   });
 
   it("GET /auth/gemini/accounts masks tokens", async () => {
