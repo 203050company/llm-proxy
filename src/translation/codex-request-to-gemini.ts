@@ -171,8 +171,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
+  "additionalProperties",
+  "const",
+  "default",
   "exclusiveMaximum",
   "exclusiveMinimum",
+  "propertyNames",
 ]);
 
 function sanitizeGeminiSchema(value: unknown): unknown {

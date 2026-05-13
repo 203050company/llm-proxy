@@ -122,11 +122,22 @@ describe("Code Assist translation", () => {
           parameters: {
             $schema: "http://json-schema.org/draft-07/schema#",
             type: "object",
+            additionalProperties: false,
             properties: {
               timeout: {
                 type: "number",
                 exclusiveMinimum: 0,
                 minimum: 1,
+              },
+              options: {
+                type: "object",
+                default: {},
+                additionalProperties: false,
+                propertyNames: { pattern: "^[a-z_]+$" },
+                properties: {
+                  cwd: { type: "string" },
+                  mode: { const: "safe" },
+                },
               },
             },
           },
@@ -151,6 +162,13 @@ describe("Code Assist translation", () => {
                 timeout: {
                   type: "number",
                   minimum: 1,
+                },
+                options: {
+                  type: "object",
+                  properties: {
+                    cwd: { type: "string" },
+                    mode: {},
+                  },
                 },
               },
             },
