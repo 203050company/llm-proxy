@@ -1,0 +1,40 @@
+services:
+  codex-proxy:
+    # image: ghcr.io/icebear0828/codex-proxy:latest
+    # To build from source instead: comment out 'image' above, uncomment 'build' below
+    build: .
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${PORT:-8080}:8080"
+      - "1455:1455"
+      # Optional Ollama-compatible bridge. Enable ollama.enabled and use
+      # ollama.host=0.0.0.0 inside the container before uncommenting.
+      # Host binding stays loopback-only to avoid exposing the unauthenticated
+      # Ollama API to the LAN.
+      # - "127.0.0.1:${OLLAMA_BRIDGE_PORT:-11434}:11434"
+    volumes:
+      - ./data:/app/data
+      - ./config:/app/config
+      # Share host's Codex CLI auth so the dashboard "Apply to Codex CLI"
+      # button rewrites the file the host CLI actually reads.
+      # Container runs as `node` (uid 1000); /root/.codex is unreachable
+      # for non-root users, so mount into the node user's home instead.
+      - ${HOME}/.codex:/home/node/.codex
+      - ${HOME}/.gemini:/home/node/.gemini
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - HOST=0.0.0.0
+      - CODEX_HOME=/home/node/.codex
+
+  # -- Automatic updates (uncomment to enable) --
+  # watchtower:
+  #   image: containrrr/watchtower
+  #   volumes:
+  #     - /var/run/docker.sock:/var/run/docker.sock
+  #   command: --cleanup --interval 3600 codex-proxy
+  #   restart: unless-stopped

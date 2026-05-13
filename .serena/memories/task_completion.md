@@ -1,0 +1,3 @@
+# Task completion checklist
+
+For backend or shared TypeScript changes, run `npx tsc --noEmit --pretty false` first. Then run the relevant Vitest suite: `npm run test:unit` for isolated code, `npm run test:integration` for route/proxy behavior, and `npm run build:web` or `npm run build` when frontend or shared types changed. For dashboard UI changes, also run the local UI and verify the affected flow in a browser when possible.

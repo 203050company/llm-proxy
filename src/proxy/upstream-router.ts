@@ -1,0 +1,234 @@
+/**
+ * UpstreamRouter — routes a model name to the appropriate UpstreamAdapter.
+ *
+ * Priority (highest to lowest):
+ *   0. Gemini OAuth for Gemini models when geminiPriority is "oauth"
+ *   1. ApiKeyPool entry matching the exact model name
+ *   2. Explicit provider prefix: "openai:gpt-4o", "anthropic:claude-3-5-sonnet"
+ *   3. model_routing config table: { "deepseek-chat": "deepseek" }
+ *   4. Gemini OAuth for Gemini models when geminiPriority is "api_key"
+ *   5. Known Codex model IDs and aliases
+ *   6. Built-in name pattern rules: "claude-*" → anthropic, "gemini-*" → gemini
+ *   7. Default (codex)
+ */
+
+import type { UpstreamAdapter } from "./upstream-adapter.js";
+import type { ApiKeyPool, ApiKeyEntry } from "../auth/api-key-pool.js";
+import { getModelAliases, getModelInfo, parseModelName } from "../models/model-store.js";
+
+/** Factory that creates an UpstreamAdapter for a given ApiKeyEntry. */
+export type AdapterFactory = (entry: ApiKeyEntry) => UpstreamAdapter;
+
+export interface UpstreamRouterOptions {
+  geminiPriority?: "api_key" | "oauth";
+}
+
+export type UpstreamRouteMatch =
+  | { kind: "api-key"; adapter: UpstreamAdapter; entry: ApiKeyEntry }
+  | { kind: "gemini-oauth"; adapter: UpstreamAdapter; accountId: string }
+  | { kind: "adapter"; adapter: UpstreamAdapter }
+  | { kind: "codex"; adapter?: UpstreamAdapter }
+  | { kind: "not-found" };
+
+interface GeminiOAuthPoolLike {
+  hasActiveModel(model: string): boolean;
+  pickAccountForModel?(model: string): { id: string } | undefined;
+}
+
+type GeminiOAuthFactory = (model: string) => { adapter: UpstreamAdapter; accountId: string } | null;
+
+const FAILOVER_CHAIN: Record<string, string[]> = {
+  "gemini-3.1-pro": ["gemini-3-pro", "gemini-3.1-flash-lite"],
+  "gemini-3-pro": ["gemini-3.1-flash-lite"],
+  opus: ["sonnet", "haiku"],
+  sonnet: ["haiku"],
+};
+
+export class UpstreamRouter {
+  private apiKeyPool: ApiKeyPool | null = null;
+  private adapterFactory: AdapterFactory | null = null;
+  private geminiOAuthPool: GeminiOAuthPoolLike | null = null;
+  private geminiOAuthFactory: GeminiOAuthFactory | null = null;
+  /** Cache: apiKeyEntry.id → adapter instance. Invalidated when key changes. */
+  private dynamicAdapters = new Map<string, { apiKey: string; adapter: UpstreamAdapter }>();
+
+  private splitExplicitProvider(model: string): { tag: string; bareModel: string } | null {
+    const colonIdx = model.indexOf(":");
+    if (colonIdx <= 0) return null;
+    const tag = model.slice(0, colonIdx);
+    if (!this.adapters.has(tag)) return null;
+    return { tag, bareModel: model.slice(colonIdx + 1) };
+  }
+
+  private resolvePoolModelCandidates(model: string): string[] {
+    const parsed = parseModelNameSafe(model);
+    const modelId = parsed.modelId;
+    const explicitProvider = this.splitExplicitProvider(modelId);
+    return explicitProvider ? [modelId, explicitProvider.bareModel] : [modelId];
+  }
+
+  constructor(
+    private readonly adapters: Map<string, UpstreamAdapter>,
+    private readonly modelRouting: Record<string, string>,
+    private readonly defaultTag: string,
+    private readonly options: UpstreamRouterOptions = {},
+  ) {}
+
+  /** Attach the runtime API key pool for dynamic model resolution. */
+  setApiKeyPool(pool: ApiKeyPool, factory: AdapterFactory): void {
+    this.apiKeyPool = pool;
+    this.adapterFactory = factory;
+  }
+
+  setGeminiOAuth(pool: GeminiOAuthPoolLike, factory: GeminiOAuthFactory): void {
+    this.geminiOAuthPool = pool;
+    this.geminiOAuthFactory = factory;
+  }
+
+  resolveMatch(model: string, triedModels: string[] = []): UpstreamRouteMatch {
+    const parsed = parseModelNameSafe(model);
+    const cleanModel = parsed.modelId || model.trim();
+
+    if (triedModels.includes(cleanModel)) return { kind: "not-found" };
+    triedModels.push(cleanModel);
+
+    const explicitProvider = this.splitExplicitProvider(cleanModel);
+
+    if (this.options.geminiPriority === "oauth") {
+      const oauthFirst = this.resolveGeminiOAuthMatch(model, cleanModel);
+      if (oauthFirst) return oauthFirst;
+    }
+
+    if (this.apiKeyPool && this.adapterFactory) {
+      for (const candidate of this.resolvePoolModelCandidates(model)) {
+        const entries = this.apiKeyPool.getByModel(candidate);
+        if (entries.length > 0) {
+          const entry = pickLeastRecentlyUsed(entries);
+          this.apiKeyPool.markUsed(entry.id);
+          return { kind: "api-key", adapter: this.getOrCreateDynamicAdapter(entry), entry };
+        }
+      }
+    }
+
+    if (explicitProvider) {
+      const adapter = this.adapters.get(explicitProvider.tag);
+      if (adapter) return { kind: "adapter", adapter };
+    }
+
+    const routedTag = this.modelRouting[cleanModel];
+    if (routedTag) {
+      const adapter = this.adapters.get(routedTag);
+      if (adapter) return { kind: routedTag === this.defaultTag ? "codex" : "adapter", adapter };
+    }
+
+    if (this.options.geminiPriority !== "oauth") {
+      const geminiOAuthMatch = this.resolveGeminiOAuthMatch(model, cleanModel);
+      if (geminiOAuthMatch) return geminiOAuthMatch;
+    }
+
+    const chain = FAILOVER_CHAIN[cleanModel];
+    if (chain) {
+      for (const nextModel of chain) {
+        const match = this.resolveMatch(nextModel, triedModels);
+        if (match.kind !== "not-found") {
+          console.log(`[Router] Failover: ${cleanModel} -> ${nextModel}`);
+          return match;
+        }
+      }
+    }
+
+    if (this.isKnownCodexModel(cleanModel)) {
+      return { kind: "codex" };
+    }
+
+    if (/^claude/i.test(cleanModel) && this.adapters.has("anthropic")) {
+      return { kind: "adapter", adapter: this.adapters.get("anthropic")! };
+    }
+    if (/^gemini/i.test(cleanModel) && this.adapters.has("gemini")) {
+      return { kind: "adapter", adapter: this.adapters.get("gemini")! };
+    }
+
+    return { kind: "not-found" };
+  }
+
+  resolve(model: string): UpstreamAdapter {
+    const match = this.resolveMatch(model);
+    if (match.kind === "not-found" || !match.adapter) {
+      throw new Error(`No upstream adapter available for model \"${model}\"`);
+    }
+    return match.adapter;
+  }
+
+  isCodexModel(model: string): boolean {
+    return this.resolveMatch(model).kind === "codex";
+  }
+
+  hasApiKeyModel(model: string): boolean {
+    return this.resolveMatch(model).kind === "api-key";
+  }
+
+  private isKnownCodexModel(model: string): boolean {
+    const aliases = getModelAliases();
+    const trimmed = model.trim();
+    if (aliases[trimmed]) return true;
+    if (getModelInfo(trimmed)) return true;
+    if (/^(gpt|o\d|codex)/i.test(trimmed)) return true;
+
+    const colonIdx = trimmed.indexOf(":");
+    if (colonIdx > 0 && !this.adapters.has(trimmed.slice(0, colonIdx))) {
+      return getModelInfo(trimmed) !== undefined;
+    }
+
+    return false;
+  }
+
+  private getOrCreateDynamicAdapter(entry: ApiKeyEntry): UpstreamAdapter {
+    const cached = this.dynamicAdapters.get(entry.id);
+    if (cached && cached.apiKey === entry.apiKey) return cached.adapter;
+    const adapter = this.adapterFactory!(entry);
+    this.dynamicAdapters.set(entry.id, { apiKey: entry.apiKey, adapter });
+    return adapter;
+  }
+
+  private resolveGeminiOAuthMatch(model: string, cleanModel: string): UpstreamRouteMatch | null {
+    if (!this.geminiOAuthPool || !this.geminiOAuthFactory) return null;
+
+    for (const candidate of geminiOAuthCandidates(model, cleanModel)) {
+      if (!this.geminiOAuthPool.hasActiveModel(candidate)) continue;
+      const match = this.geminiOAuthFactory(candidate);
+      if (match) return { kind: "gemini-oauth", adapter: match.adapter, accountId: match.accountId };
+    }
+    return null;
+  }
+}
+
+function pickLeastRecentlyUsed(entries: ApiKeyEntry[]): ApiKeyEntry {
+  let best = entries[0];
+  for (let i = 1; i < entries.length; i++) {
+    const e = entries[i];
+    if (!e.lastUsedAt) return e; // never used → pick immediately
+    if (!best.lastUsedAt || e.lastUsedAt < best.lastUsedAt) best = e;
+  }
+  return best;
+}
+
+function geminiOAuthCandidates(model: string, cleanModel: string): string[] {
+  const trimmed = model.trim();
+  const candidates = [cleanModel, trimmed];
+  const colonIndex = trimmed.indexOf(":");
+  if (colonIndex > 0) {
+    const provider = trimmed.slice(0, colonIndex);
+    if (provider === "gemini" || provider === "gemini-oauth") {
+      candidates.push(trimmed.slice(colonIndex + 1));
+    }
+  }
+  return [...new Set(candidates.filter(Boolean))];
+}
+
+function parseModelNameSafe(model: string): ReturnType<typeof parseModelName> {
+  try {
+    return parseModelName(model);
+  } catch {
+    return { modelId: model.trim(), serviceTier: null, reasoningEffort: null };
+  }
+}

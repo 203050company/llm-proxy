@@ -1,0 +1,45 @@
+#!/bin/bash
+
+# --- Configuration ---
+PORT=8080
+BASE_URL="http://localhost:$PORT"
+MODEL="gpt-5.3-codex" # Default codex model alias
+
+# --- Check and Start Proxy ---
+if ! curl -s "http://localhost:$PORT/health" > /dev/null; then
+    echo "Proxy server is not responding at port $PORT. Starting via docker-compose..."
+    
+    # Get the real directory of this script, following symlinks
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+    PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
+    
+    cd "$PROJECT_ROOT" || exit 1
+    docker compose up -d
+    
+    echo "Waiting for proxy to be ready..."
+    MAX_RETRIES=30
+    RETRY_COUNT=0
+    while ! curl -s "http://localhost:$PORT/health" > /dev/null; do
+        sleep 1
+        RETRY_COUNT=$((RETRY_COUNT+1))
+        if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
+            echo "Error: Proxy failed to start after ${MAX_RETRIES}s"
+            exit 1
+        fi
+    done
+    echo "Proxy is up and healthy!"
+fi
+
+# --- Start Claude Code session ---
+export ANTHROPIC_BASE_URL="$BASE_URL"
+export ANTHROPIC_API_KEY="unused"
+export ANTHROPIC_MODEL="$MODEL"
+
+echo "Starting Claude Code session with model: $MODEL"
+claude "$@"
