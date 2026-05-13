@@ -12,6 +12,8 @@ import { Hono } from "hono";
 import { UsageStatsStore, type UsageStatsPersistence, type UsageSnapshot } from "@src/auth/usage-stats.js";
 import { createUsageStatsRoutes } from "@src/routes/admin/usage-stats.js";
 import type { AccountPool } from "@src/auth/account-pool.js";
+import type { ApiKeyPool } from "@src/auth/api-key-pool.js";
+import type { GeminiAccountPool } from "@src/auth/gemini-account-pool.js";
 
 function createMockPool(totals: { input_tokens: number; output_tokens: number; request_count: number; cached_tokens?: number }): AccountPool {
   return {
@@ -31,6 +33,46 @@ function createStore(snapshots: UsageSnapshot[] = []): UsageStatsStore {
     save: vi.fn(),
   };
   return new UsageStatsStore(persistence);
+}
+
+function createMockApiKeyPool(totals: { model: string; input_tokens: number; output_tokens: number; request_count: number }): ApiKeyPool {
+  return {
+    getAll: () => [
+      {
+        id: "api-key-1",
+        status: "active",
+        model: totals.model,
+        usage: {
+          input_tokens: totals.input_tokens,
+          output_tokens: totals.output_tokens,
+          request_count: totals.request_count,
+        },
+      },
+    ],
+  } as unknown as ApiKeyPool;
+}
+
+function createMockGeminiPool(totals: { model: string; input_tokens: number; output_tokens: number; request_count: number }): GeminiAccountPool {
+  return {
+    getAll: () => [
+      {
+        id: "gemini-1",
+        status: "active",
+        usage: {
+          input_tokens: totals.input_tokens,
+          output_tokens: totals.output_tokens,
+          request_count: totals.request_count,
+          models: {
+            [totals.model]: {
+              input_tokens: totals.input_tokens,
+              output_tokens: totals.output_tokens,
+              request_count: totals.request_count,
+            },
+          },
+        },
+      },
+    ],
+  } as unknown as GeminiAccountPool;
 }
 
 describe("usage stats routes", () => {
@@ -62,6 +104,34 @@ describe("usage stats routes", () => {
       const body = await res.json();
       expect(body.total_cached_tokens).toBe(3500);
       expect(body.total_input_tokens).toBe(5000);
+    });
+
+    it("includes runtime API key and Gemini OAuth usage", async () => {
+      const pool = createMockPool({ input_tokens: 5000, output_tokens: 1000, request_count: 20 });
+      const apiKeyPool = createMockApiKeyPool({
+        model: "openrouter/test-model",
+        input_tokens: 700,
+        output_tokens: 70,
+        request_count: 7,
+      });
+      const geminiPool = createMockGeminiPool({
+        model: "gemini-3.1-pro",
+        input_tokens: 300,
+        output_tokens: 30,
+        request_count: 3,
+      });
+      const store = createStore();
+      const app = new Hono();
+      app.route("/", createUsageStatsRoutes(pool, store, apiKeyPool, geminiPool));
+
+      const res = await app.request("/admin/usage-stats/summary");
+      const body = await res.json();
+
+      expect(body.total_input_tokens).toBe(6000);
+      expect(body.total_output_tokens).toBe(1100);
+      expect(body.total_request_count).toBe(30);
+      expect(body.total_accounts).toBe(3);
+      expect(body.active_accounts).toBe(3);
     });
   });
 

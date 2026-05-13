@@ -3,6 +3,8 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import type { AccountPool } from "../auth/account-pool.js";
+import type { ApiKeyPool } from "../auth/api-key-pool.js";
+import type { GeminiAccountPool } from "../auth/gemini-account-pool.js";
 import { getPublicDir } from "../paths.js";
 import { createHealthRoutes } from "./admin/health.js";
 import { createUpdateRoutes } from "./admin/update.js";
@@ -16,7 +18,13 @@ import { createCodexCliAuthRoutes } from "./admin/codex-cli-auth.js";
 import type { UsageStatsStore } from "../auth/usage-stats.js";
 import type { ProxyPool } from "../proxy/proxy-pool.js";
 
-export function createWebRoutes(accountPool: AccountPool, usageStats: UsageStatsStore, proxyPool?: ProxyPool): Hono {
+export function createWebRoutes(
+  accountPool: AccountPool,
+  usageStats: UsageStatsStore,
+  proxyPool?: ProxyPool,
+  apiKeyPool?: ApiKeyPool,
+  geminiPool?: GeminiAccountPool,
+): Hono {
   const app = new Hono();
 
   const publicDir = getPublicDir();
@@ -50,7 +58,7 @@ export function createWebRoutes(accountPool: AccountPool, usageStats: UsageStats
   app.route("/", createConnectionRoutes(accountPool));
   app.route("/", createSettingsRoutes(accountPool, proxyPool));
   app.route("/", createOllamaAdminRoutes());
-  app.route("/", createUsageStatsRoutes(accountPool, usageStats));
+  app.route("/", createUsageStatsRoutes(accountPool, usageStats, apiKeyPool, geminiPool));
   app.route("/", createLogRoutes());
   app.route("/", createErrorLogRoutes());
   app.route("/", createCodexCliAuthRoutes(accountPool));

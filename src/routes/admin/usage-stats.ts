@@ -7,16 +7,20 @@
 
 import { Hono } from "hono";
 import type { AccountPool } from "../../auth/account-pool.js";
+import type { ApiKeyPool } from "../../auth/api-key-pool.js";
+import type { GeminiAccountPool } from "../../auth/gemini-account-pool.js";
 import type { UsageHistoryRange, UsageStatsStore } from "../../auth/usage-stats.js";
 
 export function createUsageStatsRoutes(
   pool: AccountPool,
   statsStore: UsageStatsStore,
+  apiKeyPool?: ApiKeyPool,
+  geminiPool?: GeminiAccountPool,
 ): Hono {
   const app = new Hono();
 
   app.get("/admin/usage-stats/summary", (c) => {
-    return c.json(statsStore.getSummary(pool));
+    return c.json(statsStore.getSummary(pool, apiKeyPool, geminiPool));
   });
 
   app.get("/admin/usage-stats/history", (c) => {

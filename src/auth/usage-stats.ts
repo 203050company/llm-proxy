@@ -204,9 +204,13 @@ export class UsageStatsStore {
    * Must be called once after pool is available (not in constructor,
    * since pool may not be ready yet).
    */
-  recoverBaseline(pool: AccountPool): void {
+  recoverBaseline(
+    pool: AccountPool,
+    apiKeyPool?: ApiKeyPool,
+    geminiPool?: GeminiAccountPool,
+  ): void {
     if (!this._pendingRecovery) return;
-    const live = this.poolTotals(pool);
+    const live = this.poolTotals(pool, apiKeyPool, geminiPool);
     this.baseline = {
       input_tokens: Math.max(0, this._pendingRecovery.input_tokens - live.input_tokens),
       output_tokens: Math.max(0, this._pendingRecovery.output_tokens - live.output_tokens),
@@ -401,8 +405,12 @@ export class UsageStatsStore {
   }
 
   /** Get current cumulative summary (baseline + live pool data). */
-  getSummary(pool: AccountPool): UsageSummary {
-    const live = this.poolTotals(pool);
+  getSummary(
+    pool: AccountPool,
+    apiKeyPool?: ApiKeyPool,
+    geminiPool?: GeminiAccountPool,
+  ): UsageSummary {
+    const live = this.poolTotals(pool, apiKeyPool, geminiPool);
 
     return {
       total_input_tokens: this.baseline.input_tokens + live.input_tokens,

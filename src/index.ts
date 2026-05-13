@@ -241,8 +241,8 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   const apiKeyRoutes = createApiKeyRoutes(apiKeyPool);
   const proxyRoutes = createProxyRoutes(proxyPool, accountPool, geminiAccountPool);
   const usageStats = new UsageStatsStore();
-  usageStats.recoverBaseline(accountPool);
-  const webRoutes = createWebRoutes(accountPool, usageStats, proxyPool);
+  usageStats.recoverBaseline(accountPool, apiKeyPool, geminiAccountPool);
+  const webRoutes = createWebRoutes(accountPool, usageStats, proxyPool, apiKeyPool, geminiAccountPool);
 
   app.route("/", createDashboardAuthRoutes());
   app.route("/", authRoutes);
@@ -303,7 +303,7 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   startModelRefresh(accountPool, cookieJar, proxyPool);
 
   // Start usage stats snapshot timer (no upstream requests — quota is collected passively)
-  startQuotaRefresh(accountPool, usageStats);
+  startQuotaRefresh(accountPool, usageStats, apiKeyPool, geminiAccountPool);
 
   // Start proxy health check timer (if proxies exist)
   proxyPool.startHealthCheckTimer();
