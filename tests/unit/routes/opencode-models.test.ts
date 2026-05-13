@@ -55,11 +55,11 @@ describe("opencode-go model aliases", () => {
     const body = await res.json() as { data: Array<Record<string, unknown>> };
     const ids = body.data.map((model) => model.id);
 
-    expect(ids).toContain("claude-opencode-kimi-k2.7");
-    expect(ids).toContain("claude-opencode-kimi-k2.6");
-    expect(ids).toContain("claude-opencode-deepseek-v4-pro");
-    expect(ids).toContain("claude-opencode-minimax-m2.7");
-    expect(body.data.find((model) => model.id === "claude-opencode-kimi-k2.7")).toMatchObject({
+    expect(ids).toContain("opencode-kimi-k2.7");
+    expect(ids).toContain("opencode-kimi-k2.6");
+    expect(ids).toContain("opencode-deepseek-v4-pro");
+    expect(ids).toContain("opencode-minimax-m2.7");
+    expect(body.data.find((model) => model.id === "opencode-kimi-k2.7")).toMatchObject({
       type: "model",
       display_name: "opencode-go kimi-k2.7",
     });

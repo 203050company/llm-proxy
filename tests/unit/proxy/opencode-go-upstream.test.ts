@@ -57,16 +57,21 @@ describe("opencode-go upstream", () => {
   });
 
   it("maps Claude-discoverable aliases to raw opencode-go model ids", () => {
+    expect(resolveOpencodeGoModel("opencode-kimi-k2.7")).toBe("kimi-k2.7");
     expect(resolveOpencodeGoModel("claude-opencode-kimi-k2.7")).toBe("kimi-k2.7");
     expect(resolveOpencodeGoModel("claude-opencode-kimi-k2.6")).toBe("kimi-k2.6");
     expect(resolveOpencodeGoModel("opencode-go:deepseek-v4-pro")).toBe("deepseek-v4-pro");
     expect(resolveOpencodeGoModel("opencode-go/minimax-m2.7")).toBe("minimax-m2.7");
   });
 
-  it("covers all static raw models with Claude aliases", () => {
+  it("covers all static raw models with plain and Claude-compatible aliases", () => {
     for (const model of OPENCODE_GO_ALIASES) {
-      expect(model.alias).toMatch(/^claude-opencode-/);
+      expect(model.alias).toMatch(/^opencode-/);
       expect(resolveOpencodeGoModel(model.alias)).toBe(model.id);
+      for (const alias of model.aliases ?? []) {
+        expect(alias).toMatch(/^claude-opencode-/);
+        expect(resolveOpencodeGoModel(alias)).toBe(model.id);
+      }
     }
   });
 

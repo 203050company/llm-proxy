@@ -15,24 +15,30 @@ export interface OpencodeGoModelAlias {
   id: string;
   alias: string;
   displayName: string;
+  aliases?: string[];
 }
 
 export const OPENCODE_GO_ALIASES: OpencodeGoModelAlias[] = [
-  { id: "kimi-k2.7", alias: "claude-opencode-kimi-k2.7", displayName: "opencode-go kimi-k2.7" },
-  { id: "kimi-k2.6", alias: "claude-opencode-kimi-k2.6", displayName: "opencode-go kimi-k2.6" },
-  { id: "deepseek-v4-pro", alias: "claude-opencode-deepseek-v4-pro", displayName: "opencode-go deepseek-v4-pro" },
-  { id: "deepseek-v4-flash", alias: "claude-opencode-deepseek-v4-flash", displayName: "opencode-go deepseek-v4-flash" },
-  { id: "minimax-m2.7", alias: "claude-opencode-minimax-m2.7", displayName: "opencode-go minimax-m2.7" },
-  { id: "minimax-m2.5", alias: "claude-opencode-minimax-m2.5", displayName: "opencode-go minimax-m2.5" },
-  { id: "glm-5.1", alias: "claude-opencode-glm-5.1", displayName: "opencode-go glm-5.1" },
-  { id: "glm-4.6", alias: "claude-opencode-glm-4.6", displayName: "opencode-go glm-4.6" },
-  { id: "qwen3.6-plus", alias: "claude-opencode-qwen3.6-plus", displayName: "opencode-go qwen3.6-plus" },
-  { id: "qwen3-coder", alias: "claude-opencode-qwen3-coder", displayName: "opencode-go qwen3-coder" },
-  { id: "mimo-v2.5-pro", alias: "claude-opencode-mimo-v2.5-pro", displayName: "opencode-go mimo-v2.5-pro" },
-  { id: "mimo-vl", alias: "claude-opencode-mimo-vl", displayName: "opencode-go mimo-vl" },
+  { id: "kimi-k2.7", alias: "opencode-kimi-k2.7", aliases: ["claude-opencode-kimi-k2.7"], displayName: "opencode-go kimi-k2.7" },
+  { id: "kimi-k2.6", alias: "opencode-kimi-k2.6", aliases: ["claude-opencode-kimi-k2.6"], displayName: "opencode-go kimi-k2.6" },
+  { id: "deepseek-v4-pro", alias: "opencode-deepseek-v4-pro", aliases: ["claude-opencode-deepseek-v4-pro"], displayName: "opencode-go deepseek-v4-pro" },
+  { id: "deepseek-v4-flash", alias: "opencode-deepseek-v4-flash", aliases: ["claude-opencode-deepseek-v4-flash"], displayName: "opencode-go deepseek-v4-flash" },
+  { id: "minimax-m2.7", alias: "opencode-minimax-m2.7", aliases: ["claude-opencode-minimax-m2.7"], displayName: "opencode-go minimax-m2.7" },
+  { id: "minimax-m2.5", alias: "opencode-minimax-m2.5", aliases: ["claude-opencode-minimax-m2.5"], displayName: "opencode-go minimax-m2.5" },
+  { id: "glm-5.1", alias: "opencode-glm-5.1", aliases: ["claude-opencode-glm-5.1"], displayName: "opencode-go glm-5.1" },
+  { id: "glm-4.6", alias: "opencode-glm-4.6", aliases: ["claude-opencode-glm-4.6"], displayName: "opencode-go glm-4.6" },
+  { id: "qwen3.6-plus", alias: "opencode-qwen3.6-plus", aliases: ["claude-opencode-qwen3.6-plus"], displayName: "opencode-go qwen3.6-plus" },
+  { id: "qwen3-coder", alias: "opencode-qwen3-coder", aliases: ["claude-opencode-qwen3-coder"], displayName: "opencode-go qwen3-coder" },
+  { id: "mimo-v2.5-pro", alias: "opencode-mimo-v2.5-pro", aliases: ["claude-opencode-mimo-v2.5-pro"], displayName: "opencode-go mimo-v2.5-pro" },
+  { id: "mimo-vl", alias: "opencode-mimo-vl", aliases: ["claude-opencode-mimo-vl"], displayName: "opencode-go mimo-vl" },
 ];
 
-const ALIAS_TO_MODEL = new Map(OPENCODE_GO_ALIASES.map((model) => [model.alias, model.id]));
+const ALIAS_TO_MODEL = new Map(
+  OPENCODE_GO_ALIASES.flatMap((model) => [
+    [model.alias, model.id] as const,
+    ...(model.aliases ?? []).map((alias) => [alias, model.id] as const),
+  ]),
+);
 const MODEL_TTL_MS = 5 * 60 * 1000;
 let cachedModels: OpencodeGoModelAlias[] = OPENCODE_GO_ALIASES;
 let cacheExpiresAt = 0;

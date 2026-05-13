@@ -19,6 +19,7 @@ describe("UpstreamRouter opencode-go routing", () => {
       ["anthropic", anthropic],
     ]), {}, "codex");
 
+    expect(router.resolveMatch("opencode-kimi-k2.7")).toMatchObject({ kind: "adapter", adapter: opencode });
     expect(router.resolveMatch("claude-opencode-kimi-k2.7")).toMatchObject({ kind: "adapter", adapter: opencode });
     expect(router.resolveMatch("claude-opencode-kimi-k2.6")).toMatchObject({ kind: "adapter", adapter: opencode });
     expect(router.resolveMatch("opencode-go:deepseek-v4-pro")).toMatchObject({ kind: "adapter", adapter: opencode });
