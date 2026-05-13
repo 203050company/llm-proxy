@@ -15,6 +15,7 @@
 import type { UpstreamAdapter } from "./upstream-adapter.js";
 import type { ApiKeyPool, ApiKeyEntry } from "../auth/api-key-pool.js";
 import { getModelAliases, getModelInfo, parseModelName } from "../models/model-store.js";
+import { isOpencodeGoModel } from "./opencode-go-upstream.js";
 
 /** Factory that creates an UpstreamAdapter for a given ApiKeyEntry. */
 export type AdapterFactory = (entry: ApiKeyEntry) => UpstreamAdapter;
@@ -139,6 +140,10 @@ export class UpstreamRouter {
 
     if (this.isKnownCodexModel(cleanModel)) {
       return { kind: "codex" };
+    }
+
+    if (isOpencodeGoModel(cleanModel) && this.adapters.has("opencode-go")) {
+      return { kind: "adapter", adapter: this.adapters.get("opencode-go")! };
     }
 
     if (/^claude/i.test(cleanModel) && this.adapters.has("anthropic")) {

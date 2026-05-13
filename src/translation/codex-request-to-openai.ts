@@ -32,6 +32,10 @@ interface OpenAIToolCall {
   function: { name: string; arguments: string };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 /** Outgoing OpenAI chat completions request body. */
 export interface OpenAIChatRequest {
   model: string;
@@ -89,6 +93,25 @@ function inputItemsToMessages(input: CodexInputItem[]): OpenAIMessage[] {
   return messages;
 }
 
+function normalizeTool(tool: unknown): unknown {
+  if (!isRecord(tool)) return tool;
+  if (tool.type !== "function" || isRecord(tool.function)) return tool;
+  if (typeof tool.name !== "string") return tool;
+
+  const fn: Record<string, unknown> = { name: tool.name };
+  if (typeof tool.description === "string") fn.description = tool.description;
+  if (isRecord(tool.parameters)) fn.parameters = tool.parameters;
+  if (typeof tool.strict === "boolean") fn.strict = tool.strict;
+  return { type: "function", function: fn };
+}
+
+function normalizeToolChoice(choice: unknown): unknown {
+  if (!isRecord(choice)) return choice;
+  if (choice.type !== "function" || isRecord(choice.function)) return choice;
+  if (typeof choice.name !== "string") return choice;
+  return { type: "function", function: { name: choice.name } };
+}
+
 /**
  * Build an OpenAI chat completions request body from a CodexResponsesRequest.
  * `streaming` controls whether stream_options.include_usage is added.
@@ -124,10 +147,14 @@ export function translateCodexToOpenAIRequest(
 
   // Tools
   if (req.tools?.length) {
-    body.tools = req.tools;
+    body.tools = req.tools.map(normalizeTool);
     if (req.tool_choice !== undefined) {
-      body.tool_choice = req.tool_choice;
+      body.tool_choice = normalizeToolChoice(req.tool_choice);
     }
+  }
+
+  if (typeof req.max_output_tokens === "number") {
+    body.max_completion_tokens = req.max_output_tokens;
   }
 
   // Response format (JSON mode / structured outputs)

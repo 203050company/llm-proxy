@@ -107,7 +107,7 @@ export function translateCodexToAnthropicRequest(
   const body: AnthropicMessageRequest = {
     model: modelId,
     messages,
-    max_tokens: 8192,
+    max_tokens: req.max_output_tokens ?? 8192,
     stream: req.stream,
   };
 

@@ -108,6 +108,42 @@ describe("translateCodexToOpenAIRequest", () => {
     expect(result.tool_choice).toBe("auto");
   });
 
+  it("converts flat Codex function tools and choices to OpenAI chat shape", () => {
+    const req = makeBaseRequest({
+      input: [{ role: "user", content: "use tool" }],
+      tools: [{
+        type: "function",
+        name: "Read",
+        description: "Read a file",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      }],
+      tool_choice: { type: "function", name: "Read" },
+    });
+
+    const result = translateCodexToOpenAIRequest(req, "gpt-4o", false);
+
+    expect(result.tools).toEqual([{
+      type: "function",
+      function: {
+        name: "Read",
+        description: "Read a file",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+      },
+    }]);
+    expect(result.tool_choice).toEqual({ type: "function", function: { name: "Read" } });
+  });
+
+  it("maps max_output_tokens to max_completion_tokens", () => {
+    const req = makeBaseRequest({
+      input: [{ role: "user", content: "short" }],
+      max_output_tokens: 123,
+    });
+
+    const result = translateCodexToOpenAIRequest(req, "gpt-4o", false);
+
+    expect(result.max_completion_tokens).toBe(123);
+  });
+
   it("maps text.format to response_format", () => {
     const req = makeBaseRequest({
       input: [{ role: "user", content: "json" }],

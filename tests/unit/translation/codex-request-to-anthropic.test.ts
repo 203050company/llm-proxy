@@ -76,4 +76,15 @@ describe("translateCodexToAnthropicRequest", () => {
     const result = translateCodexToAnthropicRequest(req, "claude-3-5-haiku-20241022");
     expect(result.max_tokens).toBeGreaterThan(0);
   });
+
+  it("maps max_output_tokens to max_tokens", () => {
+    const req = makeBaseRequest({
+      input: [{ role: "user", content: "short" }],
+      max_output_tokens: 512,
+    });
+
+    const result = translateCodexToAnthropicRequest(req, "claude-3-5-sonnet-20241022");
+
+    expect(result.max_tokens).toBe(512);
+  });
 });
