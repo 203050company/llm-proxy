@@ -92,6 +92,11 @@ describe("Claude Code launcher scripts", () => {
     expect(script).toContain('MODEL="${1:-}"');
     expect(script).toContain('--model "$MODEL"');
     expect(script).toContain('CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR"');
+    expect(script).toContain('ANTHROPIC_MODEL="$MODEL"');
+    expect(script).toContain('ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL"');
+    expect(script).toContain('ANTHROPIC_DEFAULT_SONNET_MODEL="$MODEL"');
+    expect(script).toContain('ANTHROPIC_DEFAULT_HAIKU_MODEL="$MODEL"');
+    expect(script).toContain('ANTHROPIC_SMALL_FAST_MODEL="$MODEL"');
   });
 
   it("cc-opencode agents ignores CC_OPENCODE_MODEL and uses the Agent View default model", () => {
@@ -99,7 +104,6 @@ describe("Claude Code launcher scripts", () => {
 
     expect(script).toContain('if [[ "${1:-}" == "agents" ]]; then');
     expect(script).toContain('ANTHROPIC_MODEL="$AGENT_MODEL"');
-    expect(script).not.toContain('ANTHROPIC_MODEL="$MODEL"');
   });
 
   it("package metadata exposes cc-opencode as a first-class launcher", () => {

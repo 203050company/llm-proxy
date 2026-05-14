@@ -130,13 +130,18 @@ if [[ "${1:-}" == "agents" ]]; then
     exit
 fi
 
+proxy_api_key="$($HOME/.claude/bin/codex-proxy-api-key.sh)" || exit 1
 echo "Starting Claude Code OpenCode session with model: $MODEL"
 env \
-    -u ANTHROPIC_API_KEY \
     -u ANTHROPIC_AUTH_TOKEN \
-    -u ANTHROPIC_MODEL \
-    -u ANTHROPIC_SMALL_FAST_MODEL \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
+    ANTHROPIC_BASE_URL="$BASE_URL" \
+    ANTHROPIC_API_KEY="$proxy_api_key" \
+    ANTHROPIC_MODEL="$MODEL" \
+    ANTHROPIC_DEFAULT_OPUS_MODEL="$MODEL" \
+    ANTHROPIC_DEFAULT_SONNET_MODEL="$MODEL" \
+    ANTHROPIC_DEFAULT_HAIKU_MODEL="$MODEL" \
+    ANTHROPIC_SMALL_FAST_MODEL="$MODEL" \
     claude \
     --settings "$SETTINGS_PATH" \
     --model "$MODEL" \
