@@ -26,19 +26,21 @@ function runCcOpencode(args: string[], env: Record<string, string> = {}): string
   writeExecutable(join(binDir, "docker"), "#!/bin/bash\necho unexpected docker >&2\nexit 99\n");
   writeExecutable(
     join(binDir, "claude"),
-    `#!/bin/bash
-printf "CLAUDE_CONFIG_DIR=%s\\n" "$CLAUDE_CONFIG_DIR"
-printf "ANTHROPIC_AUTH_TOKEN=%s\\n" "${ANTHROPIC_AUTH_TOKEN:-}"
-printf "ANTHROPIC_BASE_URL=%s\\n" "${ANTHROPIC_BASE_URL:-}"
-printf "ANTHROPIC_MODEL=%s\\n" "${ANTHROPIC_MODEL:-}"
-printf "ANTHROPIC_DEFAULT_OPUS_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"
-printf "ANTHROPIC_DEFAULT_SONNET_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"
-printf "ANTHROPIC_DEFAULT_HAIKU_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"
-printf "ANTHROPIC_SMALL_FAST_MODEL=%s\\n" "${ANTHROPIC_SMALL_FAST_MODEL:-}"
-printf "CC_OPENCODE_MODEL=%s\\n" "${CC_OPENCODE_MODEL:-}"
-printf "CC_OPENCODE_AGENT_MODEL=%s\\n" "${CC_OPENCODE_AGENT_MODEL:-}"
-printf "ARGS=%s\\n" "$*"
-`,
+    [
+      "#!/bin/bash",
+      'printf "CLAUDE_CONFIG_DIR=%s\\n" "$CLAUDE_CONFIG_DIR"',
+      'printf "ANTHROPIC_AUTH_TOKEN=%s\\n" "${ANTHROPIC_AUTH_TOKEN:-}"',
+      'printf "ANTHROPIC_BASE_URL=%s\\n" "${ANTHROPIC_BASE_URL:-}"',
+      'printf "ANTHROPIC_MODEL=%s\\n" "${ANTHROPIC_MODEL:-}"',
+      'printf "ANTHROPIC_DEFAULT_OPUS_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}"',
+      'printf "ANTHROPIC_DEFAULT_SONNET_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"',
+      'printf "ANTHROPIC_DEFAULT_HAIKU_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"',
+      'printf "ANTHROPIC_SMALL_FAST_MODEL=%s\\n" "${ANTHROPIC_SMALL_FAST_MODEL:-}"',
+      'printf "CC_OPENCODE_MODEL=%s\\n" "${CC_OPENCODE_MODEL:-}"',
+      'printf "CC_OPENCODE_AGENT_MODEL=%s\\n" "${CC_OPENCODE_AGENT_MODEL:-}"',
+      'printf "ARGS=%s\\n" "$*"',
+      "",
+    ].join("\n"),
   );
   writeExecutable(join(claudeBinDir, "codex-proxy-api-key.sh"), "#!/bin/bash\nprintf fake-key\n");
 
@@ -176,11 +178,12 @@ describe("Claude Code launcher scripts", () => {
     expect(script).not.toContain("--dangerously-skip-permissions");
   });
 
-  it("cc-opencode terminal path passes the selected model through the proxy", () => {
+  it("cc-opencode terminal path passes the selected model through the proxy and clears launcher model env", () => {
     const output = runCcOpencode(["--model", "opencode-minimax-m2.7", "--print-shape"], {
       ANTHROPIC_AUTH_TOKEN: "real-token",
       ANTHROPIC_DEFAULT_OPUS_MODEL: "gpt-5.5",
       CC_OPENCODE_MODEL: "opencode-qwen3.6-plus",
+      CC_OPENCODE_AGENT_MODEL: "opencode-qwen3.6-plus",
     });
 
     expect(output).toContain("CLAUDE_CONFIG_DIR=");
@@ -189,6 +192,8 @@ describe("Claude Code launcher scripts", () => {
     expect(output).toContain("ANTHROPIC_BASE_URL=http://127.0.0.1:8080");
     expect(output).toContain("ANTHROPIC_MODEL=opencode-minimax-m2.7");
     expect(output).toContain("ANTHROPIC_DEFAULT_OPUS_MODEL=opencode-minimax-m2.7");
+    expect(output).toContain("CC_OPENCODE_MODEL=\n");
+    expect(output).toContain("CC_OPENCODE_AGENT_MODEL=\n");
     expect(output).toContain("ARGS=--settings ");
     expect(output).toContain(" --model opencode-minimax-m2.7 --print-shape");
     expect(output).not.toContain("--dangerously-skip-permissions");

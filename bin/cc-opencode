@@ -5,7 +5,7 @@ PORT="${CC_OPENCODE_PROXY_PORT:-8080}"
 BASE_URL="${CC_OPENCODE_BASE_URL:-http://127.0.0.1:$PORT}"
 DEFAULT_MODEL="opencode-kimi-k2.7"
 MODEL="${CC_OPENCODE_MODEL:-$DEFAULT_MODEL}"
-AGENT_MODEL="${CC_OPENCODE_AGENT_MODEL:-$DEFAULT_MODEL}"
+AGENT_MODEL="$DEFAULT_MODEL"
 SETTINGS_PATH="${CC_OPENCODE_SETTINGS:-$HOME/.claude/opencode-proxy-settings.json}"
 
 llm_proxy_root() {
@@ -52,7 +52,7 @@ parse_args() {
 }
 
 start_proxy_if_needed() {
-    if curl -s "$BASE_URL/health" > /dev/null; then
+    if curl -fsS "$BASE_URL/health" > /dev/null; then
         return
     fi
 
@@ -65,7 +65,7 @@ start_proxy_if_needed() {
     echo "Waiting for proxy to be ready..."
     MAX_RETRIES=30
     RETRY_COUNT=0
-    while ! curl -s "$BASE_URL/health" > /dev/null; do
+    while ! curl -fsS "$BASE_URL/health" > /dev/null; do
         sleep 1
         RETRY_COUNT=$((RETRY_COUNT+1))
         if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
@@ -115,6 +115,8 @@ if [[ "${1:-}" == "agents" ]]; then
     echo "Starting OpenCode Agent View with default new-session model: $AGENT_MODEL"
     env \
         -u ANTHROPIC_AUTH_TOKEN \
+        -u CC_OPENCODE_MODEL \
+        -u CC_OPENCODE_AGENT_MODEL \
         CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
         ANTHROPIC_BASE_URL="$BASE_URL" \
         ANTHROPIC_API_KEY="$proxy_api_key" \
@@ -131,10 +133,12 @@ if [[ "${1:-}" == "agents" ]]; then
     exit
 fi
 
-proxy_api_key="$($HOME/.claude/bin/codex-proxy-api-key.sh)" || exit 1
+proxy_api_key="$("$HOME/.claude/bin/codex-proxy-api-key.sh")" || exit 1
 echo "Starting Claude Code OpenCode session with model: $MODEL"
 env \
     -u ANTHROPIC_AUTH_TOKEN \
+    -u CC_OPENCODE_MODEL \
+    -u CC_OPENCODE_AGENT_MODEL \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
     ANTHROPIC_BASE_URL="$BASE_URL" \
     ANTHROPIC_API_KEY="$proxy_api_key" \
