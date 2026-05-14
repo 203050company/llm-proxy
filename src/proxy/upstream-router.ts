@@ -142,8 +142,11 @@ export class UpstreamRouter {
       return { kind: "codex" };
     }
 
-    if (isOpencodeGoModel(cleanModel) && this.adapters.has("opencode-go")) {
-      return { kind: "adapter", adapter: this.adapters.get("opencode-go")! };
+    if (isOpencodeGoModel(cleanModel)) {
+      if (this.adapters.has("opencode-go")) {
+        return { kind: "adapter", adapter: this.adapters.get("opencode-go")! };
+      }
+      return { kind: "not-found" };
     }
 
     if (/^claude/i.test(cleanModel) && this.adapters.has("anthropic")) {

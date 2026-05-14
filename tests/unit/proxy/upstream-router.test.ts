@@ -70,6 +70,12 @@ describe("UpstreamRouter", () => {
     expect(router.resolve("claude-3-haiku-20240307").tag).toBe("anthropic");
   });
 
+  it("does not route reserved opencode-go Claude aliases to Anthropic when opencode-go is unavailable", () => {
+    const anthropicOnly = new UpstreamRouter(new Map([["anthropic", anthropicAdapter]]), {}, "codex");
+
+    expect(anthropicOnly.resolveMatch("claude-opencode-kimi-k2.7")).toEqual({ kind: "not-found" });
+  });
+
   it("routes configured Claude Desktop shell aliases to codex before claude auto-routing", () => {
     expect(router.resolveMatch("claude-opus-4-7").kind).toBe("codex");
     expect(router.resolveMatch("claude-sonnet-4-6").kind).toBe("codex");
