@@ -106,6 +106,19 @@ describe("Claude Code launcher scripts", () => {
     expect(script).toContain('ANTHROPIC_MODEL="$AGENT_MODEL"');
   });
 
+  it("cc-opencode prevents Anthropic auth token leakage in every launch path", () => {
+    const script = readLauncher("cc-opencode");
+
+    expect(script.match(/-u ANTHROPIC_AUTH_TOKEN/g)).toHaveLength(2);
+    expect(script).toContain('ANTHROPIC_API_KEY="$proxy_api_key"');
+  });
+
+  it("cc-opencode does not force dangerous permission skipping", () => {
+    const script = readLauncher("cc-opencode");
+
+    expect(script).not.toContain("--dangerously-skip-permissions");
+  });
+
   it("package metadata exposes cc-opencode as a first-class launcher", () => {
     const packageJson = JSON.parse(readFileSync(resolve(process.cwd(), "package.json"), "utf-8")) as {
       bin: Record<string, string>;

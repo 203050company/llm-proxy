@@ -114,6 +114,7 @@ if [[ "${1:-}" == "agents" ]]; then
     proxy_api_key="$("$HOME/.claude/bin/codex-proxy-api-key.sh")" || exit 1
     echo "Starting OpenCode Agent View with default new-session model: $AGENT_MODEL"
     env \
+        -u ANTHROPIC_AUTH_TOKEN \
         CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
         ANTHROPIC_BASE_URL="$BASE_URL" \
         ANTHROPIC_API_KEY="$proxy_api_key" \
@@ -145,5 +146,4 @@ env \
     claude \
     --settings "$SETTINGS_PATH" \
     --model "$MODEL" \
-    "$@" \
-    --dangerously-skip-permissions
+    "$@"
