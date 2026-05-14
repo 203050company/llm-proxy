@@ -97,6 +97,41 @@ describe("opencode-go upstream", () => {
     expect(refreshed.find((model) => model.id === "qwen3.6-plus")?.alias).toBe("opencode-qwen3.6-plus");
   });
 
+  it("routes dynamically discovered aliases to raw opencode-go model ids", async () => {
+    vi.resetModules();
+    const upstream = await import("@src/proxy/opencode-go-upstream.js");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      data: [{ id: "hy3-routing-preview" }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    upstream.getOpencodeGoModelAliases();
+
+    await vi.waitFor(() => {
+      expect(upstream.getOpencodeGoModelAliases().map((model) => model.alias)).toContain("claude-opencode-hy3-routing-preview");
+    });
+
+    expect(upstream.resolveOpencodeGoModel("claude-opencode-hy3-routing-preview")).toBe("hy3-routing-preview");
+  });
+
+  it("backs off after a failed dynamic model refresh", async () => {
+    vi.resetModules();
+    const upstream = await import("@src/proxy/opencode-go-upstream.js");
+    const fetchMock = vi.fn(async () => new Response("unavailable", { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    upstream.getOpencodeGoModelAliases();
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    upstream.getOpencodeGoModelAliases();
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("routes MiniMax models to /messages and other models to /chat/completions", () => {
     expect(shouldUseOpencodeMessagesEndpoint("minimax-m2.7")).toBe(true);
     expect(shouldUseOpencodeMessagesEndpoint("minimax-m2.5")).toBe(true);

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockConfig = {
   server: { proxy_api_key: null as string | null },
@@ -45,7 +45,12 @@ import { createModelRoutes } from "@src/routes/models.js";
 describe("opencode-go model aliases", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }), { status: 200 })));
     loadStaticModels();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it("exposes Claude-discoverable aliases from /v1/models", async () => {
@@ -62,6 +67,22 @@ describe("opencode-go model aliases", () => {
     expect(body.data.find((model) => model.id === "opencode-kimi-k2.7")).toMatchObject({
       type: "model",
       display_name: "opencode-go kimi-k2.7",
+    });
+  });
+
+  it("returns opencode-go aliases from /v1/models/:modelId", async () => {
+    const app = createModelRoutes();
+
+    const res = await app.request("/v1/models/opencode-kimi-k2.7");
+    const body = await res.json() as Record<string, unknown>;
+
+    expect(res.status).toBe(200);
+    expect(body).toMatchObject({
+      id: "opencode-kimi-k2.7",
+      object: "model",
+      type: "model",
+      display_name: "opencode-go kimi-k2.7",
+      owned_by: "opencode-go",
     });
   });
 });
