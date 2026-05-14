@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   appendErrorLog,
+  getDashboardErrorLogEntries,
   groupErrorLog,
   getUnreadCount,
   readErrorLog,
@@ -30,7 +31,7 @@ export function createErrorLogRoutes(): Hono {
   const app = new Hono();
 
   app.get("/admin/error-logs", (c) => {
-    const entries = readErrorLog();
+    const entries = getDashboardErrorLogEntries();
     const groups = groupErrorLog(entries);
     return c.json({ groups });
   });
@@ -46,12 +47,12 @@ export function createErrorLogRoutes(): Hono {
   });
 
   app.get("/admin/error-logs/count", (c) => {
-    const entries = readErrorLog();
+    const entries = getDashboardErrorLogEntries();
     return c.json({ total: entries.length, unread: getUnreadCount(entries) });
   });
 
   app.post("/admin/error-logs/seen", (c) => {
-    const entries = readErrorLog(1);
+    const entries = getDashboardErrorLogEntries();
     // Use the newest entry's ts; if the log is empty, mark "now" so a
     // later report doesn't need to be considered already-read.
     const cursor = entries[0]?.ts ?? new Date().toISOString();

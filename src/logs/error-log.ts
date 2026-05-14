@@ -214,6 +214,38 @@ export function readErrorLog(limit?: number): ErrorLogEntry[] {
   return combined;
 }
 
+const STREAM_CLOSE_KINDS = new Set([
+  "client-abort",
+  "client-write-failed",
+  "upstream-error",
+  "upstream-premature",
+]);
+
+const STREAM_CLOSE_ERROR_NAMES = new Set([
+  "StreamClientAbort",
+  "StreamClientWriteFailed",
+  "StreamUpstreamError",
+  "StreamUpstreamPrematureClose",
+]);
+
+function isStreamCloseEntry(entry: ErrorLogEntry): boolean {
+  if (entry.source !== "server") return false;
+  const kind = entry.context?.kind;
+  if (typeof kind === "string" && STREAM_CLOSE_KINDS.has(kind)) return true;
+  return STREAM_CLOSE_ERROR_NAMES.has(entry.error.name);
+}
+
+/**
+ * Entries shown by the dashboard Errors tab.
+ *
+ * Historical versions wrote request stream-close diagnostics into the same
+ * JSONL file as uncaught app errors. Filter them at the dashboard boundary so
+ * existing local logs no longer inflate the visible error count.
+ */
+export function getDashboardErrorLogEntries(entries: ErrorLogEntry[] = readErrorLog()): ErrorLogEntry[] {
+  return entries.filter((entry) => !isStreamCloseEntry(entry));
+}
+
 function firstStackFrame(stack: string | undefined): string {
   if (!stack) return "";
   for (const line of stack.split("\n")) {

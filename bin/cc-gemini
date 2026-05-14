@@ -121,8 +121,6 @@ if [ "${CC_GEMINI_BARE:-0}" != "0" ]; then
         *) CLAUDE_ARGS+=(--bare) ;;
     esac
 fi
-if [ "${1:-}" = "agents" ]; then
-    export CLAUDE_CONFIG_DIR
-    CLAUDE_CONFIG_DIR="$(prepare_agent_view_config)"
-fi
+export CLAUDE_CONFIG_DIR
+CLAUDE_CONFIG_DIR="$(prepare_agent_view_config)"
 claude "${CLAUDE_ARGS[@]}" "$@"
