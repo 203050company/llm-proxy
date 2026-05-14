@@ -4,6 +4,7 @@ import { tmpdir } from "os";
 import { join } from "path";
 import {
   OPENCODE_GO_ALIASES,
+  getOpencodeGoModelAliases,
   OpencodeGoUpstream,
   resolveOpencodeGoAuth,
   resolveOpencodeGoModel,
@@ -73,6 +74,27 @@ describe("opencode-go upstream", () => {
         expect(resolveOpencodeGoModel(alias)).toBe(model.id);
       }
     }
+  });
+
+  it("keeps static plain aliases after dynamic model refresh", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      data: [
+        { id: "minimax-m2.7" },
+        { id: "qwen3.6-plus" },
+        { id: "hy3-preview" },
+      ],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    getOpencodeGoModelAliases();
+
+    await vi.waitFor(() => {
+      expect(getOpencodeGoModelAliases().map((model) => model.alias)).toContain("claude-opencode-hy3-preview");
+    });
+
+    const refreshed = getOpencodeGoModelAliases();
+    expect(refreshed.find((model) => model.id === "minimax-m2.7")?.alias).toBe("opencode-minimax-m2.7");
+    expect(refreshed.find((model) => model.id === "qwen3.6-plus")?.alias).toBe("opencode-qwen3.6-plus");
   });
 
   it("routes MiniMax models to /messages and other models to /chat/completions", () => {

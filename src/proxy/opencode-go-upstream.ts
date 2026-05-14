@@ -169,8 +169,8 @@ function extractModelId(value: unknown): string | null {
 
 function mergeStaticAliases(discovered: OpencodeGoModelAlias[]): OpencodeGoModelAlias[] {
   const byId = new Map<string, OpencodeGoModelAlias>();
-  for (const model of OPENCODE_GO_ALIASES) byId.set(model.id, model);
   for (const model of discovered) byId.set(model.id, model);
+  for (const model of OPENCODE_GO_ALIASES) byId.set(model.id, model);
   return [...byId.values()];
 }
 
