@@ -11,6 +11,13 @@ import {
   shouldUseOpencodeMessagesEndpoint,
 } from "@src/proxy/opencode-go-upstream.js";
 
+async function collectOpencodeEvents(response: Response) {
+  const upstream = new OpencodeGoUpstream("secret", "https://example.test/v1");
+  const events = [];
+  for await (const event of upstream.parseStream(response)) events.push(event);
+  return events;
+}
+
 describe("opencode-go upstream", () => {
   const originalEnv = { ...process.env };
   let home: string;
@@ -132,6 +139,89 @@ describe("opencode-go upstream", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("normalizes OpenAI-style opencode-go SSE chunks into Codex events", async () => {
+    const chunks = [
+      { id: "chatcmpl_1", choices: [{ delta: { content: "hi " } }] },
+      { choices: [{ delta: { content: "there" } }] },
+      { choices: [{ delta: { tool_calls: [{ index: 0, id: "call_1", function: { name: "Read", arguments: "{\"pa" } }] } }] },
+      {
+        choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: "th\":\"a\"}" } }] }, finish_reason: "tool_calls" }],
+        usage: { prompt_tokens: 3, completion_tokens: 4 },
+      },
+    ];
+    const response = new Response(chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join(""));
+
+    const events = await collectOpencodeEvents(response);
+
+    expect(events.find((event) => event.event === "response.created")?.data).toEqual({ response: { id: "chatcmpl_1" } });
+    expect(events.filter((event) => event.event === "response.output_text.delta").map((event) => event.data)).toEqual([
+      { delta: "hi " },
+      { delta: "there" },
+    ]);
+    expect(events.find((event) => event.event === "response.output_item.added")?.data).toMatchObject({
+      output_index: 0,
+      item: { type: "function_call", call_id: "call_1", name: "Read" },
+    });
+    expect(events.filter((event) => event.event === "response.function_call_arguments.delta").map((event) => event.data)).toEqual([
+      { call_id: "call_1", delta: "{\"pa", output_index: 0 },
+      { call_id: "call_1", delta: "th\":\"a\"}", output_index: 0 },
+    ]);
+    expect(events.find((event) => event.event === "response.function_call_arguments.done")?.data).toEqual({
+      call_id: "call_1",
+      name: "Read",
+      arguments: "{\"path\":\"a\"}",
+      output_index: 0,
+    });
+    expect(events.find((event) => event.event === "response.completed")?.data).toMatchObject({
+      response: { status: "completed", usage: { input_tokens: 3, output_tokens: 4 } },
+    });
+  });
+
+  it("normalizes Anthropic-style opencode-go SSE events into Codex events", async () => {
+    const events = [
+      ["message_start", { message: { id: "msg_1", usage: { input_tokens: 5 } } }],
+      ["content_block_delta", { index: 0, delta: { type: "text_delta", text: "hello" } }],
+      ["content_block_start", { index: 1, content_block: { type: "tool_use", id: "toolu_1", name: "Read" } }],
+      ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: "{\"path\":" } }],
+      ["content_block_delta", { index: 1, delta: { type: "input_json_delta", partial_json: "\"a\"}" } }],
+      ["content_block_stop", { index: 1 }],
+      ["message_delta", { usage: { output_tokens: 7 } }],
+      ["message_stop", {}],
+    ];
+    const response = new Response(events.map(([event, data]) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join(""));
+
+    const parsed = await collectOpencodeEvents(response);
+
+    expect(parsed.find((event) => event.event === "response.created")?.data).toEqual({ response: { id: "msg_1" } });
+    expect(parsed.find((event) => event.event === "response.output_text.delta")?.data).toEqual({ delta: "hello" });
+    expect(parsed.find((event) => event.event === "response.output_item.added")?.data).toMatchObject({
+      output_index: 1,
+      item: { type: "function_call", call_id: "toolu_1", name: "Read" },
+    });
+    expect(parsed.filter((event) => event.event === "response.function_call_arguments.delta").map((event) => event.data)).toEqual([
+      { call_id: "toolu_1", delta: "{\"path\":", output_index: 1 },
+      { call_id: "toolu_1", delta: "\"a\"}", output_index: 1 },
+    ]);
+    expect(parsed.find((event) => event.event === "response.function_call_arguments.done")?.data).toEqual({
+      call_id: "toolu_1",
+      name: "Read",
+      arguments: "{\"path\":\"a\"}",
+      output_index: 1,
+    });
+    expect(parsed.find((event) => event.event === "response.completed")?.data).toEqual({
+      response: {
+        id: "msg_1",
+        status: "completed",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 7,
+          input_tokens_details: {},
+          output_tokens_details: {},
+        },
+      },
+    });
+  });
+
   it("routes MiniMax models to /messages and other models to /chat/completions", () => {
     expect(shouldUseOpencodeMessagesEndpoint("minimax-m2.7")).toBe(true);
     expect(shouldUseOpencodeMessagesEndpoint("minimax-m2.5")).toBe(true);
@@ -162,5 +252,74 @@ describe("opencode-go upstream", () => {
 
     expect(fetchMock.mock.calls[0][0]).toBe("https://opencode.ai/zen/go/v1/messages");
     expect(fetchMock.mock.calls[1][0]).toBe("https://opencode.ai/zen/go/v1/chat/completions");
+  });
+
+  it("omits forced tool_choice for opencode-go models that reject required tool selection", async () => {
+    process.env.OPENCODE_GO_API_KEY = "secret";
+    const fetchMock = vi.fn(async () => new Response("data: [DONE]\n\n", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const upstream = new OpencodeGoUpstream();
+    await upstream.createResponse({
+      model: "claude-opencode-kimi-k2.6",
+      input: [{ role: "user", content: "hello" }],
+      tools: [{ type: "function", name: "Bash", parameters: { type: "object", properties: {} } }],
+      tool_choice: { type: "function", name: "Bash" },
+      stream: false,
+      store: false,
+      max_output_tokens: 10,
+    }, new AbortController().signal);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as Record<string, unknown>;
+    expect(body.tools).toBeDefined();
+    expect(body.tool_choice).toBeUndefined();
+  });
+
+  it("backfills reasoning_content for Kimi tool call history", async () => {
+    process.env.OPENCODE_GO_API_KEY = "secret";
+    const fetchMock = vi.fn(async () => new Response("data: [DONE]\n\n", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const upstream = new OpencodeGoUpstream();
+    await upstream.createResponse({
+      model: "claude-opencode-kimi-k2.6",
+      input: [
+        { role: "user", content: "Use Bash to echo OK" },
+        { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: "{\"command\":\"echo OK\"}" },
+        { type: "function_call_output", call_id: "toolu_1", output: "OK" },
+      ],
+      tools: [{ type: "function", name: "Bash", parameters: { type: "object", properties: {} } }],
+      stream: false,
+      store: false,
+      max_output_tokens: 10,
+    }, new AbortController().signal);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as { messages: Array<Record<string, unknown>> };
+    const assistantMessage = body.messages.find((message) => Array.isArray(message.tool_calls));
+    expect(assistantMessage).toMatchObject({ role: "assistant", reasoning_content: " " });
+  });
+
+  it("backfills reasoning_content for DeepSeek tool call history", async () => {
+    process.env.OPENCODE_GO_API_KEY = "secret";
+    const fetchMock = vi.fn(async () => new Response("data: [DONE]\n\n", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const upstream = new OpencodeGoUpstream();
+    await upstream.createResponse({
+      model: "claude-opencode-deepseek-v4-pro",
+      input: [
+        { role: "user", content: "Use Bash to echo OK" },
+        { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: "{\"command\":\"echo OK\"}" },
+        { type: "function_call_output", call_id: "toolu_1", output: "OK" },
+      ],
+      tools: [{ type: "function", name: "Bash", parameters: { type: "object", properties: {} } }],
+      stream: false,
+      store: false,
+      max_output_tokens: 10,
+    }, new AbortController().signal);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as { messages: Array<Record<string, unknown>> };
+    const assistantMessage = body.messages.find((message) => Array.isArray(message.tool_calls));
+    expect(assistantMessage).toMatchObject({ role: "assistant", reasoning_content: " " });
   });
 });

@@ -36,6 +36,41 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Validate and fix message ordering for OpenAI API compatibility.
+ * DeepSeek (and other strict providers) require:
+ * - assistant messages with tool_calls must be followed by tool messages
+ * - tool messages must reference existing tool_calls
+ */
+function validateAndFixToolCalls(messages: OpenAIMessage[]): OpenAIMessage[] {
+  const fixed: OpenAIMessage[] = [];
+  const pendingToolCallIds = new Set<string>();
+
+  for (const msg of messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      // Clear previous pending calls - this is a new assistant turn
+      pendingToolCallIds.clear();
+      for (const tc of msg.tool_calls) {
+        pendingToolCallIds.add(tc.id);
+      }
+      fixed.push(msg);
+    } else if (msg.role === "tool") {
+      // Only include tool messages that reference pending tool calls
+      if (pendingToolCallIds.has(msg.tool_call_id!)) {
+        pendingToolCallIds.delete(msg.tool_call_id!);
+        fixed.push(msg);
+      }
+      // Drop orphaned tool messages
+    } else {
+      // Non-tool, non-assistant messages clear pending state
+      pendingToolCallIds.clear();
+      fixed.push(msg);
+    }
+  }
+
+  return fixed;
+}
+
 /** Outgoing OpenAI chat completions request body. */
 export interface OpenAIChatRequest {
   model: string;
@@ -130,9 +165,12 @@ export function translateCodexToOpenAIRequest(
 
   messages.push(...inputItemsToMessages(req.input));
 
+  // Validate and fix tool_calls ordering for strict providers (DeepSeek, etc.)
+  const validatedMessages = validateAndFixToolCalls(messages);
+
   const body: OpenAIChatRequest = {
     model: modelId,
-    messages,
+    messages: validatedMessages,
     stream: streaming,
   };
 

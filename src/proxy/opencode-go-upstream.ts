@@ -123,6 +123,29 @@ export function shouldUseOpencodeMessagesEndpoint(modelId: string): boolean {
   return modelId === "minimax-m2.7" || modelId === "minimax-m2.5";
 }
 
+function shouldOmitForcedToolChoice(modelId: string): boolean {
+  return /^(kimi-|deepseek-|qwen)/.test(modelId);
+}
+
+function shouldBackfillReasoningContent(modelId: string): boolean {
+  return modelId.startsWith("kimi-") || modelId.startsWith("deepseek-");
+}
+
+function backfillReasoningContent(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.messages)) return body;
+  return {
+    ...body,
+    messages: body.messages.map((message) => {
+      if (!isRecord(message)) return message;
+      const reasoningContent = message.reasoning_content;
+      if (message.role === "assistant" && Array.isArray(message.tool_calls) && (typeof reasoningContent !== "string" || reasoningContent.length === 0)) {
+        return { ...message, reasoning_content: " " };
+      }
+      return message;
+    }),
+  };
+}
+
 export function getOpencodeGoModelAliases(): OpencodeGoModelAlias[] {
   if (Date.now() >= cacheExpiresAt && !refreshPromise) {
     refreshPromise = refreshOpencodeGoModels()
@@ -205,10 +228,15 @@ export class OpencodeGoUpstream implements UpstreamAdapter {
 
   async createResponse(req: CodexResponsesRequest, signal: AbortSignal): Promise<Response> {
     const modelId = resolveOpencodeGoModel(req.model);
+    const upstreamReq = shouldOmitForcedToolChoice(modelId) && req.tool_choice !== undefined
+      ? { ...req, tool_choice: undefined }
+      : req;
     const useMessages = shouldUseOpencodeMessagesEndpoint(modelId);
     const body = useMessages
-      ? translateCodexToAnthropicRequest(req, modelId)
-      : translateCodexToOpenAIRequest(req, modelId, req.stream);
+      ? translateCodexToAnthropicRequest(upstreamReq, modelId)
+      : shouldBackfillReasoningContent(modelId)
+        ? backfillReasoningContent(translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream))
+        : translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream);
     const path = useMessages ? "/messages" : "/chat/completions";
 
     const response = await fetch(`${this.baseUrl}${path}`, withFetchDispatcher({
