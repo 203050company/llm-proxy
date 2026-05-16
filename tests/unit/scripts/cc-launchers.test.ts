@@ -36,6 +36,8 @@ function runCcOpencode(args: string[], env: Record<string, string> = {}): string
       'printf "ANTHROPIC_DEFAULT_SONNET_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_SONNET_MODEL:-}"',
       'printf "ANTHROPIC_DEFAULT_HAIKU_MODEL=%s\\n" "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}"',
       'printf "ANTHROPIC_SMALL_FAST_MODEL=%s\\n" "${ANTHROPIC_SMALL_FAST_MODEL:-}"',
+      'printf "CLAUDE_CODE_MAX_CONTEXT_TOKENS=%s\\n" "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}"',
+      'printf "DISABLE_COMPACT=%s\\n" "${DISABLE_COMPACT:-}"',
       'printf "CC_OPENCODE_MODEL=%s\\n" "${CC_OPENCODE_MODEL:-}"',
       'printf "CC_OPENCODE_AGENT_MODEL=%s\\n" "${CC_OPENCODE_AGENT_MODEL:-}"',
       'printf "ARGS=%s\\n" "$*"',
@@ -176,6 +178,19 @@ describe("Claude Code launcher scripts", () => {
     const script = readLauncher("cc-opencode");
 
     expect(script).not.toContain("--dangerously-skip-permissions");
+  });
+
+  it("cc-opencode leaves Claude Code compaction enabled", () => {
+    const script = readLauncher("cc-opencode");
+    const output = runCcOpencode(["agents"], {
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "400000",
+      DISABLE_COMPACT: "1",
+    });
+
+    expect(script).not.toContain("CLAUDE_CODE_MAX_CONTEXT_TOKENS=\"400000\"");
+    expect(script).not.toContain("DISABLE_COMPACT=\"1\"");
+    expect(output).toContain("CLAUDE_CODE_MAX_CONTEXT_TOKENS=\n");
+    expect(output).toContain("DISABLE_COMPACT=\n");
   });
 
   it("cc-opencode terminal path passes the selected model through the proxy and clears launcher model env", () => {
