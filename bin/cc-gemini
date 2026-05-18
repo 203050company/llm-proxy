@@ -81,7 +81,7 @@ export ANTHROPIC_DEFAULT_HAIKU_MODEL="gemini-3.1-flash-lite[1m]"
 
 echo "Starting Claude Code session with model: $MODEL"
 CLAUDE_ARGS=()
-if [ "${CC_GEMINI_BARE:-0}" != "0" ]; then
+if [ "${CC_GEMINI_BARE:-1}" != "0" ]; then
     case " $* " in
         *" --bare "*) ;;
         *) CLAUDE_ARGS+=(--bare) ;;
