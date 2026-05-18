@@ -184,6 +184,42 @@ describe("proxy-handler integration", () => {
     expect(accountPool.release).not.toHaveBeenCalled();
   });
 
+  it("passes an availability explanation to no-account formatting", async () => {
+    const formatNoAccount = vi.fn((message?: string) => ({
+      error: "no_account",
+      message,
+    }));
+    const accountPool = createMockAccountPool({
+      acquire: vi.fn(() => null),
+      explainAvailability: vi.fn(() => ({
+        total: 6,
+        eligible: 0,
+        active: 3,
+        expired: 1,
+        refreshing: 0,
+        disabled: 0,
+        banned: 0,
+        rateLimitedStatus: 0,
+        quotaExhaustedStatus: 0,
+        quotaExhausted: 2,
+        concurrencyFull: 0,
+        modelPlanMismatch: 0,
+        excludedByRetry: 0,
+        preferredPlans: ["plus"],
+      })),
+    });
+    const fmt = createMockFormatAdapter({ formatNoAccount });
+    const { app } = buildTestApp({ accountPool, fmt });
+
+    const res = await app.request("/test", { method: "POST" });
+
+    expect(res.status).toBe(503);
+    expect(formatNoAccount).toHaveBeenCalledWith(expect.stringContaining("0/6 eligible"));
+    expect(formatNoAccount).toHaveBeenCalledWith(expect.stringContaining("2 quota-exhausted"));
+    expect(formatNoAccount).toHaveBeenCalledWith(expect.stringContaining("1 expired"));
+    expect(formatNoAccount).toHaveBeenCalledWith(expect.stringContaining("plans: plus"));
+  });
+
   // 2. Non-streaming success
   it("returns JSON result from collectTranslator for non-streaming", async () => {
     const accountPool = createMockAccountPool();
@@ -519,6 +555,16 @@ describe("proxy-handler integration", () => {
       input_tokens: 5,
       output_tokens: 15,
     });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
   });
 
   it("attributes collect CodexApiError after EmptyResponseError retry to the new account", async () => {
@@ -594,6 +640,26 @@ describe("proxy-handler integration", () => {
     // MAX_EMPTY_RETRIES = 2, so 3 total attempts → 3 acquires (1 initial + 2 retries)
     // recordEmptyResponse called for each failed attempt
     expect(accountPool.recordEmptyResponse).toHaveBeenCalledTimes(3);
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(3, {
+      model: "codex",
+      excludeIds: ["e1", "e2"],
+      preferredEntryId: undefined,
+    });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(3, {
+      model: "codex",
+      excludeIds: ["e1", "e2"],
+      preferredEntryId: undefined,
+    });
   });
 
   // 10. No account for retry → 502 with specific message

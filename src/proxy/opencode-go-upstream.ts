@@ -131,15 +131,23 @@ function shouldBackfillReasoningContent(modelId: string): boolean {
   return modelId.startsWith("kimi-") || modelId.startsWith("deepseek-");
 }
 
-function backfillReasoningContent(body: unknown): unknown {
+function backfillReasoningContent(body: unknown, modelId: string): unknown {
   if (!isRecord(body) || !Array.isArray(body.messages)) return body;
   return {
     ...body,
     messages: body.messages.map((message) => {
       if (!isRecord(message)) return message;
       const reasoningContent = message.reasoning_content;
-      if (message.role === "assistant" && Array.isArray(message.tool_calls) && (typeof reasoningContent !== "string" || reasoningContent.length === 0)) {
-        return { ...message, reasoning_content: " " };
+      // Kimi/DeepSeek reject follow-up requests when thinking-mode assistant
+      // history omits reasoning_content; DeepSeek also requires it on
+      // assistant tool-call messages.
+      if (message.role === "assistant" && (typeof reasoningContent !== "string" || reasoningContent.length === 0)) {
+        const hasToolCalls = Array.isArray(message.tool_calls);
+        if (modelId.startsWith("kimi-")) {
+          if (hasToolCalls) return { ...message, reasoning_content: " " };
+        } else if (modelId.startsWith("deepseek-")) {
+          return { ...message, reasoning_content: " " };
+        }
       }
       return message;
     }),
@@ -235,7 +243,7 @@ export class OpencodeGoUpstream implements UpstreamAdapter {
     const body = useMessages
       ? translateCodexToAnthropicRequest(upstreamReq, modelId)
       : shouldBackfillReasoningContent(modelId)
-        ? backfillReasoningContent(translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream))
+        ? backfillReasoningContent(translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream), modelId)
         : translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream);
     const path = useMessages ? "/messages" : "/chat/completions";
 

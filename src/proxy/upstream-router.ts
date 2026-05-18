@@ -87,8 +87,19 @@ export class UpstreamRouter {
   }
 
   resolveMatch(model: string, triedModels: string[] = []): UpstreamRouteMatch {
+    const trimmedModel = model.trim();
+
+    // OpenCode Go models must be checked BEFORE Codex model resolution to
+    // prevent parseModelNameSafe from falling back to the default Codex model.
+    if (isOpencodeGoModel(trimmedModel)) {
+      if (this.adapters.has("opencode-go")) {
+        return { kind: "adapter", adapter: this.adapters.get("opencode-go")! };
+      }
+      return { kind: "not-found" };
+    }
+
     const parsed = parseModelNameSafe(model);
-    const cleanModel = parsed.modelId || model.trim();
+    const cleanModel = parsed.modelId || trimmedModel;
 
     if (triedModels.includes(cleanModel)) return { kind: "not-found" };
     triedModels.push(cleanModel);

@@ -3,7 +3,7 @@
 # --- Configuration ---
 PORT="${CC_OPENCODE_PROXY_PORT:-8080}"
 BASE_URL="${CC_OPENCODE_BASE_URL:-http://127.0.0.1:$PORT}"
-DEFAULT_MODEL="opencode-kimi-k2.7"
+DEFAULT_MODEL="opencode-kimi-k2.6"
 MODEL="${CC_OPENCODE_MODEL:-$DEFAULT_MODEL}"
 AGENT_MODEL="$DEFAULT_MODEL"
 SETTINGS_PATH="${CC_OPENCODE_SETTINGS:-$HOME/.claude/opencode-proxy-settings.json}"
@@ -60,7 +60,7 @@ start_proxy_if_needed() {
 
     PROJECT_ROOT="$(llm_proxy_root)"
     cd "$PROJECT_ROOT" || exit 1
-    docker compose up -d
+    docker compose up -d --build
 
     echo "Waiting for proxy to be ready..."
     MAX_RETRIES=30

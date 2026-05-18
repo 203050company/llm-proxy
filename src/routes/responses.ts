@@ -457,12 +457,12 @@ export async function collectPassthrough(
 const PASSTHROUGH_FORMAT: FormatAdapter = {
   tag: "Responses",
   noAccountStatus: 503,
-  formatNoAccount: () => ({
+  formatNoAccount: (message = "No available accounts. All accounts are expired or rate-limited.") => ({
     type: "error",
     error: {
       type: "server_error",
       code: "no_available_accounts",
-      message: "No available accounts. All accounts are expired or rate-limited.",
+      message,
     },
   }),
   format429: (msg) => ({

@@ -262,6 +262,58 @@ describe("translateAnthropicToCodexRequest", () => {
       });
     });
 
+    it("orders tool_result before text when user content mixes both", () => {
+      const result = translateAnthropicToCodexRequest(
+        makeRequest({
+          messages: [
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "tool_use" as const,
+                  id: "toolu_skill",
+                  name: "Skill",
+                  input: { skill: "superpowers:brainstorming" },
+                },
+              ],
+            },
+            {
+              role: "user",
+              content: [
+                {
+                  type: "tool_result" as const,
+                  tool_use_id: "toolu_skill",
+                  content: "Launching skill: superpowers:brainstorming",
+                },
+                {
+                  type: "text" as const,
+                  text: "Base directory for this skill: /tmp/superpowers",
+                },
+              ],
+            },
+          ],
+        }),
+      );
+
+      expect(result.input).toEqual([
+        {
+          type: "function_call",
+          call_id: "toolu_skill",
+          name: "Skill",
+          arguments: "{\"skill\":\"superpowers:brainstorming\"}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "toolu_skill",
+          output: "Launching skill: superpowers:brainstorming",
+        },
+        {
+          role: "user",
+          content: "Base directory for this skill: /tmp/superpowers",
+        },
+      ]);
+    });
+
     it("prepends 'Error: ' to tool_result output when is_error is true", () => {
       const result = translateAnthropicToCodexRequest(
         makeRequest({

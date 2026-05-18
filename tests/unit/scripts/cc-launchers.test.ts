@@ -134,7 +134,7 @@ describe("Claude Code launcher scripts", () => {
   it("cc-opencode hard-pins Agent View-created sessions to Kimi", () => {
     const script = readLauncher("cc-opencode");
 
-    expect(script).toContain('DEFAULT_MODEL="opencode-kimi-k2.7"');
+    expect(script).toContain('DEFAULT_MODEL="opencode-kimi-k2.6"');
     expect(script).toContain('AGENT_MODEL="$DEFAULT_MODEL"');
     expect(script).toContain('ANTHROPIC_MODEL="$AGENT_MODEL"');
     expect(script).toContain('ANTHROPIC_DEFAULT_OPUS_MODEL="$AGENT_MODEL"');
@@ -225,8 +225,8 @@ describe("Claude Code launcher scripts", () => {
     expect(output).toContain("/.claude-agent-view/opencode-go/all");
     expect(output).toContain("ANTHROPIC_AUTH_TOKEN=\n");
     expect(output).toContain("ANTHROPIC_BASE_URL=http://127.0.0.1:8080");
-    expect(output).toContain("ANTHROPIC_MODEL=opencode-kimi-k2.7");
-    expect(output).toContain("ANTHROPIC_DEFAULT_OPUS_MODEL=opencode-kimi-k2.7");
+    expect(output).toContain("ANTHROPIC_MODEL=opencode-kimi-k2.6");
+    expect(output).toContain("ANTHROPIC_DEFAULT_OPUS_MODEL=opencode-kimi-k2.6");
     expect(output).toContain("CC_OPENCODE_MODEL=\n");
     expect(output).toContain("CC_OPENCODE_AGENT_MODEL=\n");
     expect(output).toContain("ARGS=agents");

@@ -78,7 +78,8 @@ export async function* streamCodexToAnthropic(
   let textBlockStarted = false;
   let thinkingBlockStarted = false;
   const functionCallIds = new Set<string>();
-  const callIdsWithDeltas = new Set<string>();
+  const pendingToolCalls = new Map<string, { name: string; argumentsBuffer: string; hasDeltas: boolean }>();
+  const pendingTextDeltas: string[] = [];
   let responseId: string | null = null;
 
   const publishFunctionCallId = (callId: string): void => {
@@ -118,6 +119,46 @@ export async function* streamCodexToAnthropic(
       });
       textBlockStarted = true;
     }
+  }
+
+  function* emitTextDelta(text: string): Generator<string> {
+    yield* closeThinkingIfOpen();
+    yield* ensureTextBlock();
+    yield formatSSE("content_block_delta", {
+      type: "content_block_delta",
+      index: contentIndex,
+      delta: { type: "text_delta", text },
+    });
+  }
+
+  function* flushPendingTextDeltas(): Generator<string> {
+    while (pendingTextDeltas.length > 0) {
+      const text = pendingTextDeltas.shift();
+      if (text) yield* emitTextDelta(text);
+    }
+  }
+
+  function* emitToolUseBlock(callId: string, name: string, inputJson: string): Generator<string> {
+    yield formatSSE("content_block_start", {
+      type: "content_block_start",
+      index: contentIndex,
+      content_block: {
+        type: "tool_use",
+        id: callId,
+        name,
+        input: {},
+      },
+    });
+    yield formatSSE("content_block_delta", {
+      type: "content_block_delta",
+      index: contentIndex,
+      delta: { type: "input_json_delta", partial_json: inputJson },
+    });
+    yield formatSSE("content_block_stop", {
+      type: "content_block_stop",
+      index: contentIndex,
+    });
+    contentIndex++;
   }
 
   // 1. message_start
@@ -178,47 +219,41 @@ export async function* streamCodexToAnthropic(
 
       yield* closeThinkingIfOpen();
       yield* closeTextIfOpen();
-
-      // Start tool_use block
-      yield formatSSE("content_block_start", {
-        type: "content_block_start",
-        index: contentIndex,
-        content_block: {
-          type: "tool_use",
-          id: evt.functionCallStart.callId,
-          name: evt.functionCallStart.name,
-          input: {},
-        },
+      pendingToolCalls.set(evt.functionCallStart.callId, {
+        name: evt.functionCallStart.name,
+        argumentsBuffer: "",
+        hasDeltas: false,
       });
       continue;
     }
 
     if (evt.functionCallDelta) {
-      callIdsWithDeltas.add(evt.functionCallDelta.callId);
-      yield formatSSE("content_block_delta", {
-        type: "content_block_delta",
-        index: contentIndex,
-        delta: { type: "input_json_delta", partial_json: evt.functionCallDelta.delta },
-      });
+      const pending = pendingToolCalls.get(evt.functionCallDelta.callId) ?? {
+        name: "",
+        argumentsBuffer: "",
+        hasDeltas: false,
+      };
+      pending.argumentsBuffer += evt.functionCallDelta.delta;
+      pending.hasDeltas = true;
+      pendingToolCalls.set(evt.functionCallDelta.callId, pending);
       continue;
     }
 
     if (evt.functionCallDone) {
       publishFunctionCallId(evt.functionCallDone.callId);
-      // Emit full arguments if no deltas were streamed
-      if (!callIdsWithDeltas.has(evt.functionCallDone.callId)) {
-        yield formatSSE("content_block_delta", {
-          type: "content_block_delta",
-          index: contentIndex,
-          delta: { type: "input_json_delta", partial_json: evt.functionCallDone.arguments },
-        });
+      const pending = pendingToolCalls.get(evt.functionCallDone.callId);
+      const inputJson = pending?.hasDeltas ? pending.argumentsBuffer : evt.functionCallDone.arguments;
+      yield* closeThinkingIfOpen();
+      yield* closeTextIfOpen();
+      yield* emitToolUseBlock(
+        evt.functionCallDone.callId,
+        evt.functionCallDone.name || pending?.name || "",
+        inputJson,
+      );
+      pendingToolCalls.delete(evt.functionCallDone.callId);
+      if (pendingToolCalls.size === 0) {
+        yield* flushPendingTextDeltas();
       }
-      // Close this tool_use block
-      yield formatSSE("content_block_stop", {
-        type: "content_block_stop",
-        index: contentIndex,
-      });
-      contentIndex++;
       continue;
     }
 
@@ -226,15 +261,11 @@ export async function* streamCodexToAnthropic(
       case "response.output_text.delta": {
         if (evt.textDelta) {
           hasContent = true;
-          // Close thinking block if open (transition from thinking → text)
-          yield* closeThinkingIfOpen();
-          // Open a text block if not already open
-          yield* ensureTextBlock();
-          yield formatSSE("content_block_delta", {
-            type: "content_block_delta",
-            index: contentIndex,
-            delta: { type: "text_delta", text: evt.textDelta },
-          });
+          if (pendingToolCalls.size > 0) {
+            pendingTextDeltas.push(evt.textDelta);
+          } else {
+            yield* emitTextDelta(evt.textDelta);
+          }
         }
         break;
       }
@@ -261,6 +292,7 @@ export async function* streamCodexToAnthropic(
   }
 
   // 3. Close any open blocks
+  yield* flushPendingTextDeltas();
   yield* closeThinkingIfOpen();
   yield* closeTextIfOpen();
 

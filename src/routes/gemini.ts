@@ -63,10 +63,10 @@ function parseModelAction(param: string): {
 const GEMINI_FORMAT: FormatAdapter = {
   tag: "Gemini",
   noAccountStatus: 503,
-  formatNoAccount: () =>
+  formatNoAccount: (message = "No available accounts. All accounts are expired or rate-limited.") =>
     makeError(
       503,
-      "No available accounts. All accounts are expired or rate-limited.",
+      message,
       "UNAVAILABLE",
     ),
   format429: (msg) => makeError(429, msg, "RESOURCE_EXHAUSTED"),

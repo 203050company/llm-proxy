@@ -306,7 +306,7 @@ describe("opencode-go upstream", () => {
 
     const upstream = new OpencodeGoUpstream();
     await upstream.createResponse({
-      model: "claude-opencode-deepseek-v4-pro",
+      model: "claude-opencode-deepseek-v4-flash",
       input: [
         { role: "user", content: "Use Bash to echo OK" },
         { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: "{\"command\":\"echo OK\"}" },
