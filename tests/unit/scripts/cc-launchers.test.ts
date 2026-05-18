@@ -13,6 +13,42 @@ function writeExecutable(path: string, content: string): void {
   chmodSync(path, 0o755);
 }
 
+function runCcCodex(args: string[], env: Record<string, string> = {}): string {
+  const root = mkdtempSync(join(tmpdir(), "cc-codex-"));
+  const home = join(root, "home");
+  const binDir = join(root, "bin");
+
+  mkdirSync(binDir, { recursive: true });
+
+  writeExecutable(join(binDir, "curl"), "#!/bin/bash\nexit 0\n");
+  writeExecutable(join(binDir, "docker"), "#!/bin/bash\necho unexpected docker >&2\nexit 99\n");
+  writeExecutable(
+    join(binDir, "claude"),
+    [
+      "#!/bin/bash",
+      'printf "CLAUDE_CONFIG_DIR=%s\\n" "$CLAUDE_CONFIG_DIR"',
+      'printf "CLAUDE_CODE_MAX_CONTEXT_TOKENS=%s\\n" "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}"',
+      'printf "DISABLE_COMPACT=%s\\n" "${DISABLE_COMPACT:-}"',
+      'printf "ARGS=%s\\n" "$*"',
+      "",
+    ].join("\n"),
+  );
+
+  try {
+    return execFileSync(resolve(process.cwd(), "bin", "cc-codex"), args, {
+      encoding: "utf-8",
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH ?? ""}`,
+        HOME: home,
+        ...env,
+      },
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
 function runCcOpencode(args: string[], env: Record<string, string> = {}): string {
   const root = mkdtempSync(join(tmpdir(), "cc-opencode-"));
   const home = join(root, "home");
@@ -180,6 +216,16 @@ describe("Claude Code launcher scripts", () => {
     expect(script).not.toContain("--dangerously-skip-permissions");
   });
 
+  it("cc-codex leaves Claude Code compaction enabled", () => {
+    const output = runCcCodex(["--print-shape"], {
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "400000",
+      DISABLE_COMPACT: "1",
+    });
+
+    expect(output).toContain("CLAUDE_CODE_MAX_CONTEXT_TOKENS=\n");
+    expect(output).toContain("DISABLE_COMPACT=\n");
+  });
+
   it("cc-opencode leaves Claude Code compaction enabled", () => {
     const script = readLauncher("cc-opencode");
     const output = runCcOpencode(["agents"], {
@@ -197,6 +243,8 @@ describe("Claude Code launcher scripts", () => {
     const output = runCcOpencode(["--model", "opencode-minimax-m2.7", "--print-shape"], {
       ANTHROPIC_AUTH_TOKEN: "real-token",
       ANTHROPIC_DEFAULT_OPUS_MODEL: "gpt-5.5",
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS: "400000",
+      DISABLE_COMPACT: "1",
       CC_OPENCODE_MODEL: "opencode-qwen3.6-plus",
       CC_OPENCODE_AGENT_MODEL: "opencode-qwen3.6-plus",
     });
@@ -207,6 +255,8 @@ describe("Claude Code launcher scripts", () => {
     expect(output).toContain("ANTHROPIC_BASE_URL=http://127.0.0.1:8080");
     expect(output).toContain("ANTHROPIC_MODEL=opencode-minimax-m2.7");
     expect(output).toContain("ANTHROPIC_DEFAULT_OPUS_MODEL=opencode-minimax-m2.7");
+    expect(output).toContain("CLAUDE_CODE_MAX_CONTEXT_TOKENS=\n");
+    expect(output).toContain("DISABLE_COMPACT=\n");
     expect(output).toContain("CC_OPENCODE_MODEL=\n");
     expect(output).toContain("CC_OPENCODE_AGENT_MODEL=\n");
     expect(output).toContain("ARGS=--settings ");

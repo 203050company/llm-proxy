@@ -78,4 +78,7 @@ export CLAUDE_CONFIG_DIR
 CLAUDE_CONFIG_DIR="$(prepare_agent_view_config)"
 
 echo "Starting Claude Code session with model: $MODEL"
-claude "$@"
+env \
+    -u CLAUDE_CODE_MAX_CONTEXT_TOKENS \
+    -u DISABLE_COMPACT \
+    claude "$@"

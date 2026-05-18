@@ -137,6 +137,8 @@ proxy_api_key="$("$HOME/.claude/bin/codex-proxy-api-key.sh")" || exit 1
 echo "Starting Claude Code OpenCode session with model: $MODEL"
 env \
     -u ANTHROPIC_AUTH_TOKEN \
+    -u CLAUDE_CODE_MAX_CONTEXT_TOKENS \
+    -u DISABLE_COMPACT \
     -u CC_OPENCODE_MODEL \
     -u CC_OPENCODE_AGENT_MODEL \
     CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
