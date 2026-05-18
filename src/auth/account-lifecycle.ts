@@ -15,6 +15,23 @@ import type { AccountEntry, AcquiredAccount } from "./types.js";
 
 const ACQUIRE_LOCK_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+export interface AvailabilityExplanation {
+  total: number;
+  eligible: number;
+  active: number;
+  expired: number;
+  refreshing: number;
+  disabled: number;
+  banned: number;
+  rateLimitedStatus: number;
+  quotaExhaustedStatus: number;
+  quotaExhausted: number;
+  concurrencyFull: number;
+  modelPlanMismatch: number;
+  excludedByRetry: number;
+  preferredPlans: string[];
+}
+
 export class AccountLifecycle {
   /** Per-account active slot timestamps. Each entry = one in-flight request. */
   private acquireLocks: Map<string, number[]> = new Map();
@@ -137,6 +154,91 @@ export class AccountLifecycle {
       accountId: selected.accountId,
       prevSlotMs,
     };
+  }
+
+  explainAvailability(options?: { model?: string; excludeIds?: string[] }): AvailabilityExplanation {
+    const now = new Date();
+    const entries = this.registry.getAllEntries();
+    for (const entry of entries) {
+      this.registry.refreshStatus(entry, now);
+    }
+
+    const config = getConfig();
+    const maxConcurrent = config.auth.max_concurrent_per_account ?? 3;
+    const skipExhausted = config.quota?.skip_exhausted === true;
+    const excludeSet = options?.excludeIds?.length ? new Set(options.excludeIds) : null;
+    const preferredPlans = options?.model ? getModelPlanTypes(options.model) : [];
+    const planSet = preferredPlans.length > 0 ? new Set(preferredPlans) : null;
+
+    const explanation: AvailabilityExplanation = {
+      total: entries.length,
+      eligible: 0,
+      active: 0,
+      expired: 0,
+      refreshing: 0,
+      disabled: 0,
+      banned: 0,
+      rateLimitedStatus: 0,
+      quotaExhaustedStatus: 0,
+      quotaExhausted: 0,
+      concurrencyFull: 0,
+      modelPlanMismatch: 0,
+      excludedByRetry: 0,
+      preferredPlans,
+    };
+
+    for (const entry of entries) {
+      switch (entry.status) {
+        case "active":
+          explanation.active++;
+          break;
+        case "expired":
+          explanation.expired++;
+          break;
+        case "refreshing":
+          explanation.refreshing++;
+          break;
+        case "disabled":
+          explanation.disabled++;
+          break;
+        case "banned":
+          explanation.banned++;
+          break;
+        case "rate_limited":
+          explanation.rateLimitedStatus++;
+          break;
+        case "quota_exhausted":
+          explanation.quotaExhaustedStatus++;
+          break;
+      }
+
+      if (excludeSet?.has(entry.id)) {
+        explanation.excludedByRetry++;
+        continue;
+      }
+      if (entry.status !== "active") continue;
+      if (this.slotCount(entry.id) >= maxConcurrent) {
+        explanation.concurrencyFull++;
+        continue;
+      }
+      if (skipExhausted && hasReachedCachedQuota(entry)) {
+        explanation.quotaExhausted++;
+        continue;
+      }
+      if (planSet) {
+        if (!entry.planType) {
+          explanation.modelPlanMismatch++;
+          continue;
+        }
+        if (!planSet.has(entry.planType) && isPlanFetched(entry.planType)) {
+          explanation.modelPlanMismatch++;
+          continue;
+        }
+      }
+      explanation.eligible++;
+    }
+
+    return explanation;
   }
 
   release(

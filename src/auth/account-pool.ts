@@ -11,6 +11,7 @@ import { createFsPersistence } from "./account-persistence.js";
 import { AccountRegistry } from "./account-registry.js";
 import { AccountLifecycle } from "./account-lifecycle.js";
 import type { AccountPersistence, PersistenceLoadHealth } from "./account-persistence.js";
+import type { AvailabilityExplanation } from "./account-lifecycle.js";
 import type { RotationStrategyName } from "./rotation-strategy.js";
 import type {
   AccountEntry,
@@ -90,6 +91,10 @@ export class AccountPool {
 
   acquire(options?: { model?: string; excludeIds?: string[]; preferredEntryId?: string }): AcquiredAccount | null {
     return this.lifecycle.acquire(options);
+  }
+
+  explainAvailability(options?: { model?: string; excludeIds?: string[] }): AvailabilityExplanation {
+    return this.lifecycle.explainAvailability(options);
   }
 
   release(

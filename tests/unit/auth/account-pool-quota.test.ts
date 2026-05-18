@@ -369,6 +369,29 @@ describe("AccountPool quota methods", () => {
       expect(codeReview?.reset_at).toBeGreaterThan(nowSec);
     });
 
+    it("reactivates quota_exhausted accounts after cached quota reset time has passed", () => {
+      const id = pool.addAccount(createValidJwt({ accountId: "q-reset", planType: "plus" }));
+      const nowSec = Math.floor(Date.now() / 1000);
+      pool.updateCachedQuota(id, makeQuota({
+        rate_limit: {
+          allowed: false,
+          limit_reached: true,
+          used_percent: 100,
+          reset_at: nowSec - 10,
+          limit_window_seconds: 3600,
+        },
+      }));
+      pool.markStatus(id, "quota_exhausted");
+
+      const acquired = pool.acquire({ preferredEntryId: id });
+
+      expect(acquired).not.toBeNull();
+      expect(acquired!.entryId).toBe(id);
+      pool.release(acquired!.entryId);
+      expect(pool.getEntry(id)?.status).toBe("active");
+      expect(pool.getEntry(id)?.cachedQuota?.rate_limit.limit_reached).toBe(false);
+    });
+
     it("allows cached exhausted accounts when skip_exhausted is false", () => {
       resetConfigForTesting();
       setConfigForTesting(createMockConfig({ quota: { skip_exhausted: false } }));

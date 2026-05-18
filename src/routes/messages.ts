@@ -44,10 +44,10 @@ function makeAnthropicFormat(wantThinking: boolean): FormatAdapter {
   return {
     tag: "Messages",
     noAccountStatus: 529 as StatusCode,
-    formatNoAccount: () =>
+    formatNoAccount: (message = "No available accounts. All accounts are expired or rate-limited.") =>
       makeError(
         "overloaded_error",
-        "No available accounts. All accounts are expired or rate-limited.",
+        message,
       ),
     format429: (msg) => makeError("rate_limit_error", msg),
     formatError: (_status, msg) => makeError("api_error", msg),

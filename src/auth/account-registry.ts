@@ -29,6 +29,7 @@ import type {
 import { hasReachedCachedQuota } from "./quota-skip.js";
 
 type ResettableQuotaWindow = {
+  allowed?: boolean;
   used_percent: number | null;
   reset_at: number | null;
   limit_window_seconds?: number | null;
@@ -47,6 +48,7 @@ function resetExpiredQuotaWindow(
 ): boolean {
   const resetAt = quotaWindow?.reset_at;
   if (quotaWindow == null || resetAt == null || nowSec < resetAt) return false;
+  if ("allowed" in quotaWindow) quotaWindow.allowed = true;
   quotaWindow.used_percent = 0;
   quotaWindow.limit_reached = false;
   quotaWindow.reset_at = nextResetAt(resetAt, quotaWindow.limit_window_seconds, nowSec);
@@ -620,7 +622,10 @@ export class AccountRegistry {
       changed = resetExpiredQuotaWindow(quota.code_review_rate_limit, nowSec) || changed;
 
       if (changed) {
-        if (entry.status === "rate_limited" && this.quotaAllowsRequests(quota)) {
+        if (
+          (entry.status === "rate_limited" || entry.status === "quota_exhausted") &&
+          this.quotaAllowsRequests(quota)
+        ) {
           entry.status = "active";
           entry.usage.rate_limit_until = null;
         }
