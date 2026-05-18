@@ -115,6 +115,8 @@ if [[ "${1:-}" == "agents" ]]; then
     echo "Starting OpenCode Agent View with default new-session model: $AGENT_MODEL"
     env \
         -u ANTHROPIC_AUTH_TOKEN \
+        -u CLAUDE_CODE_MAX_CONTEXT_TOKENS \
+        -u DISABLE_COMPACT \
         -u CC_OPENCODE_MODEL \
         -u CC_OPENCODE_AGENT_MODEL \
         CLAUDE_CONFIG_DIR="$CLAUDE_CONFIG_DIR" \
@@ -126,9 +128,7 @@ if [[ "${1:-}" == "agents" ]]; then
         ANTHROPIC_DEFAULT_HAIKU_MODEL="$AGENT_MODEL" \
         ANTHROPIC_SMALL_FAST_MODEL="$AGENT_MODEL" \
         API_TIMEOUT_MS="3000000" \
-        CLAUDE_CODE_MAX_CONTEXT_TOKENS="400000" \
         CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="1" \
-        DISABLE_COMPACT="1" \
         claude "$@"
     exit
 fi
