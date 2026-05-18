@@ -15,6 +15,7 @@ import type { CodexInputItem, CodexContentPart, CodexResponsesRequest } from "..
 interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
   content?: string | OpenAIContentPart[] | null;
+  reasoning_content?: string;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -64,7 +65,11 @@ function inputItemsToMessages(input: CodexInputItem[]): OpenAIMessage[] {
       const role = item.role as "user" | "assistant" | "system";
       const oaiRole = role === "system" ? "system" as const : role;
       if (typeof item.content === "string") {
-        messages.push({ role: oaiRole, content: item.content, reasoning_content: item.reasoning_content });
+        const msg: OpenAIMessage = { role: oaiRole, content: item.content };
+        if (role === "assistant" && "reasoning_content" in item) {
+          msg.reasoning_content = item.reasoning_content;
+        }
+        messages.push(msg);
       } else {
         messages.push({ role: oaiRole, content: contentPartsToOpenAI(item.content) });
       }
