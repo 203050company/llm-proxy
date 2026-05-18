@@ -138,14 +138,15 @@ function backfillReasoningContent(body: unknown, modelId: string): unknown {
     messages: body.messages.map((message) => {
       if (!isRecord(message)) return message;
       const reasoningContent = message.reasoning_content;
-      // Kimi: always backfill tool call messages
-      // DeepSeek: backfill all assistant messages EXCEPT those with tool_calls
+      // Kimi/DeepSeek reject follow-up requests when thinking-mode assistant
+      // history omits reasoning_content; DeepSeek also requires it on
+      // assistant tool-call messages.
       if (message.role === "assistant" && (typeof reasoningContent !== "string" || reasoningContent.length === 0)) {
         const hasToolCalls = Array.isArray(message.tool_calls);
         if (modelId.startsWith("kimi-")) {
           if (hasToolCalls) return { ...message, reasoning_content: " " };
         } else if (modelId.startsWith("deepseek-")) {
-          if (!hasToolCalls) return { ...message, reasoning_content: " " };
+          return { ...message, reasoning_content: " " };
         }
       }
       return message;

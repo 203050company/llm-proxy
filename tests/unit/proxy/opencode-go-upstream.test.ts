@@ -298,4 +298,28 @@ describe("opencode-go upstream", () => {
     const assistantMessage = body.messages.find((message) => Array.isArray(message.tool_calls));
     expect(assistantMessage).toMatchObject({ role: "assistant", reasoning_content: " " });
   });
+
+  it("backfills reasoning_content for DeepSeek tool call history", async () => {
+    process.env.OPENCODE_GO_API_KEY = "secret";
+    const fetchMock = vi.fn(async () => new Response("data: [DONE]\n\n", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const upstream = new OpencodeGoUpstream();
+    await upstream.createResponse({
+      model: "claude-opencode-deepseek-v4-flash",
+      input: [
+        { role: "user", content: "Use Bash to echo OK" },
+        { type: "function_call", call_id: "toolu_1", name: "Bash", arguments: "{\"command\":\"echo OK\"}" },
+        { type: "function_call_output", call_id: "toolu_1", output: "OK" },
+      ],
+      tools: [{ type: "function", name: "Bash", parameters: { type: "object", properties: {} } }],
+      stream: false,
+      store: false,
+      max_output_tokens: 10,
+    }, new AbortController().signal);
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1]?.body as string) as { messages: Array<Record<string, unknown>> };
+    const assistantMessage = body.messages.find((message) => Array.isArray(message.tool_calls));
+    expect(assistantMessage).toMatchObject({ role: "assistant", reasoning_content: " " });
+  });
 });

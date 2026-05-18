@@ -519,6 +519,11 @@ describe("proxy-handler integration", () => {
       input_tokens: 5,
       output_tokens: 15,
     });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
   });
 
   it("attributes collect CodexApiError after EmptyResponseError retry to the new account", async () => {
@@ -594,6 +599,16 @@ describe("proxy-handler integration", () => {
     // MAX_EMPTY_RETRIES = 2, so 3 total attempts → 3 acquires (1 initial + 2 retries)
     // recordEmptyResponse called for each failed attempt
     expect(accountPool.recordEmptyResponse).toHaveBeenCalledTimes(3);
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(2, {
+      model: "codex",
+      excludeIds: ["e1"],
+      preferredEntryId: undefined,
+    });
+    expect(accountPool.acquire).toHaveBeenNthCalledWith(3, {
+      model: "codex",
+      excludeIds: ["e1", "e2"],
+      preferredEntryId: undefined,
+    });
   });
 
   // 10. No account for retry → 502 with specific message

@@ -91,6 +91,46 @@ function extractMultimodalContent(
   return parts.length > 0 ? parts : "";
 }
 
+function imageBlockToContentPart(block: Record<string, unknown>): CodexContentPart | null {
+  if (block.type !== "image") return null;
+  const source = block.source as
+    | { type: string; media_type: string; data: string }
+    | undefined;
+  if (source?.type !== "base64" || !source.media_type || !source.data) return null;
+  return {
+    type: "input_image",
+    image_url: toDataImageUrl(source.media_type, source.data),
+  };
+}
+
+function toolResultToOutput(
+  block: Record<string, unknown>,
+): { callId: string; output: string; imageParts: CodexContentPart[] } {
+  const callId = typeof block.tool_use_id === "string" ? block.tool_use_id : "unknown";
+  let output = "";
+  const imageParts: CodexContentPart[] = [];
+
+  if (typeof block.content === "string") {
+    output = block.content;
+  } else if (Array.isArray(block.content)) {
+    const blocks = block.content as Array<Record<string, unknown>>;
+    output = blocks
+      .filter((b) => b.type === "text" && typeof b.text === "string")
+      .map((b) => b.text as string)
+      .join("\n");
+    for (const b of blocks) {
+      const imagePart = imageBlockToContentPart(b);
+      if (imagePart) imageParts.push(imagePart);
+    }
+  }
+
+  if (block.is_error) {
+    output = `Error: ${output}`;
+  }
+
+  return { callId, output, imageParts };
+}
+
 /**
  * Convert Anthropic message content blocks into native Codex input items.
  * Handles text, image, tool_use, and tool_result blocks.
@@ -107,6 +147,42 @@ function contentToInputItems(
 
   // Build content (text or multimodal) for the message itself
   const hasToolBlocks = content.some((b) => b.type === "tool_use" || b.type === "tool_result");
+  if (role === "user" && hasToolBlocks) {
+    const followUpText: string[] = [];
+    const followUpImages: CodexContentPart[] = [];
+
+    for (const block of content) {
+      if (block.type === "tool_result") {
+        const result = toolResultToOutput(block);
+        items.push({
+          type: "function_call_output",
+          call_id: result.callId,
+          output: result.output,
+        });
+        followUpImages.push(...result.imageParts);
+      } else if (block.type === "text" && typeof block.text === "string") {
+        followUpText.push(block.text);
+      } else {
+        const imagePart = imageBlockToContentPart(block);
+        if (imagePart) followUpImages.push(imagePart);
+      }
+    }
+
+    if (followUpImages.length > 0) {
+      items.push({
+        role: "user",
+        content: [
+          ...followUpText.map((text) => ({ type: "input_text" as const, text })),
+          ...followUpImages,
+        ],
+      });
+    } else if (followUpText.length > 0) {
+      items.push({ role: "user", content: followUpText.join("\n") });
+    }
+
+    return items;
+  }
+
   if (role === "user") {
     const extracted = extractMultimodalContent(content);
     if (extracted || !hasToolBlocks) {
@@ -137,44 +213,16 @@ function contentToInputItems(
         arguments: args,
       });
     } else if (block.type === "tool_result") {
-      const toolUseId = typeof block.tool_use_id === "string" ? block.tool_use_id : "unknown";
-      let resultText = "";
-      const imageParts: CodexContentPart[] = [];
-      if (typeof block.content === "string") {
-        resultText = block.content;
-      } else if (Array.isArray(block.content)) {
-        const blocks = block.content as Array<Record<string, unknown>>;
-        resultText = blocks
-          .filter((b) => b.type === "text" && typeof b.text === "string")
-          .map((b) => b.text as string)
-          .join("\n");
-        // Extract image blocks for a follow-up user message
-        for (const b of blocks) {
-          if (b.type === "image") {
-            const source = b.source as
-              | { type: string; media_type: string; data: string }
-              | undefined;
-            if (source?.type === "base64" && source.media_type && source.data) {
-              imageParts.push({
-                type: "input_image",
-                image_url: toDataImageUrl(source.media_type, source.data),
-              });
-            }
-          }
-        }
-      }
-      if (block.is_error) {
-        resultText = `Error: ${resultText}`;
-      }
+      const result = toolResultToOutput(block);
       items.push({
         type: "function_call_output",
-        call_id: toolUseId,
-        output: resultText,
+        call_id: result.callId,
+        output: result.output,
       });
       // Codex function_call_output is string-only; inject images as a
       // subsequent user message so the model can still see them.
-      if (imageParts.length > 0) {
-        items.push({ role: "user", content: imageParts });
+      if (result.imageParts.length > 0) {
+        items.push({ role: "user", content: result.imageParts });
       }
     }
   }
