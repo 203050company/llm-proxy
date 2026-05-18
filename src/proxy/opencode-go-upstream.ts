@@ -40,6 +40,7 @@ const ALIAS_TO_MODEL = new Map(
   ]),
 );
 const MODEL_TTL_MS = 5 * 60 * 1000;
+const MODEL_REFRESH_FAILURE_BACKOFF_MS = 30 * 1000;
 let cachedModels: OpencodeGoModelAlias[] = OPENCODE_GO_ALIASES;
 let cacheExpiresAt = 0;
 let refreshPromise: Promise<void> | null = null;
@@ -97,9 +98,17 @@ export function resolveOpencodeGoBaseUrl(): string {
   return (process.env.OPENCODE_GO_BASE_URL?.trim() || OPENCODE_GO_BASE_URL).replace(/\/$/, "");
 }
 
+export function getOpencodeGoModelAlias(model: string): OpencodeGoModelAlias | undefined {
+  const trimmed = model.trim();
+  const staticModelId = ALIAS_TO_MODEL.get(trimmed);
+  if (staticModelId) return OPENCODE_GO_ALIASES.find((alias) => alias.id === staticModelId);
+  return cachedModels.find((alias) => alias.alias === trimmed || (alias.aliases ?? []).includes(trimmed));
+}
+
 export function resolveOpencodeGoModel(model: string): string {
   const trimmed = model.trim();
-  if (ALIAS_TO_MODEL.has(trimmed)) return ALIAS_TO_MODEL.get(trimmed)!;
+  const alias = getOpencodeGoModelAlias(trimmed);
+  if (alias) return alias.id;
   if (trimmed.startsWith("opencode-go:")) return trimmed.slice("opencode-go:".length);
   if (trimmed.startsWith("opencode-go/")) return trimmed.slice("opencode-go/".length);
   return trimmed;
@@ -107,11 +116,41 @@ export function resolveOpencodeGoModel(model: string): string {
 
 export function isOpencodeGoModel(model: string): boolean {
   const trimmed = model.trim();
-  return ALIAS_TO_MODEL.has(trimmed) || trimmed.startsWith("opencode-go:") || trimmed.startsWith("opencode-go/");
+  return !!getOpencodeGoModelAlias(trimmed) || trimmed.startsWith("opencode-go:") || trimmed.startsWith("opencode-go/");
 }
 
 export function shouldUseOpencodeMessagesEndpoint(modelId: string): boolean {
   return modelId === "minimax-m2.7" || modelId === "minimax-m2.5";
+}
+
+function shouldOmitForcedToolChoice(modelId: string): boolean {
+  return /^(kimi-|deepseek-|qwen)/.test(modelId);
+}
+
+function shouldBackfillReasoningContent(modelId: string): boolean {
+  return modelId.startsWith("kimi-") || modelId.startsWith("deepseek-");
+}
+
+function backfillReasoningContent(body: unknown, modelId: string): unknown {
+  if (!isRecord(body) || !Array.isArray(body.messages)) return body;
+  return {
+    ...body,
+    messages: body.messages.map((message) => {
+      if (!isRecord(message)) return message;
+      const reasoningContent = message.reasoning_content;
+      // Kimi: always backfill tool call messages
+      // DeepSeek: backfill all assistant messages EXCEPT those with tool_calls
+      if (message.role === "assistant" && (typeof reasoningContent !== "string" || reasoningContent.length === 0)) {
+        const hasToolCalls = Array.isArray(message.tool_calls);
+        if (modelId.startsWith("kimi-")) {
+          if (hasToolCalls) return { ...message, reasoning_content: " " };
+        } else if (modelId.startsWith("deepseek-")) {
+          if (!hasToolCalls) return { ...message, reasoning_content: " " };
+        }
+      }
+      return message;
+    }),
+  };
 }
 
 export function getOpencodeGoModelAliases(): OpencodeGoModelAlias[] {
@@ -134,7 +173,10 @@ async function refreshOpencodeGoModels(): Promise<void> {
       headers: { Accept: "application/json" },
       signal: controller.signal,
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      cacheExpiresAt = Date.now() + MODEL_REFRESH_FAILURE_BACKOFF_MS;
+      return;
+    }
     const parsed = await response.json() as unknown;
     const rawModels = Array.isArray(parsed)
       ? parsed
@@ -154,7 +196,11 @@ async function refreshOpencodeGoModels(): Promise<void> {
     if (models.length > 0) {
       cachedModels = mergeStaticAliases(models);
       cacheExpiresAt = Date.now() + MODEL_TTL_MS;
+    } else {
+      cacheExpiresAt = Date.now() + MODEL_REFRESH_FAILURE_BACKOFF_MS;
     }
+  } catch {
+    cacheExpiresAt = Date.now() + MODEL_REFRESH_FAILURE_BACKOFF_MS;
   } finally {
     clearTimeout(timeout);
   }
@@ -189,10 +235,15 @@ export class OpencodeGoUpstream implements UpstreamAdapter {
 
   async createResponse(req: CodexResponsesRequest, signal: AbortSignal): Promise<Response> {
     const modelId = resolveOpencodeGoModel(req.model);
+    const upstreamReq = shouldOmitForcedToolChoice(modelId) && req.tool_choice !== undefined
+      ? { ...req, tool_choice: undefined }
+      : req;
     const useMessages = shouldUseOpencodeMessagesEndpoint(modelId);
     const body = useMessages
-      ? translateCodexToAnthropicRequest(req, modelId)
-      : translateCodexToOpenAIRequest(req, modelId, req.stream);
+      ? translateCodexToAnthropicRequest(upstreamReq, modelId)
+      : shouldBackfillReasoningContent(modelId)
+        ? backfillReasoningContent(translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream), modelId)
+        : translateCodexToOpenAIRequest(upstreamReq, modelId, upstreamReq.stream);
     const path = useMessages ? "/messages" : "/chat/completions";
 
     const response = await fetch(`${this.baseUrl}${path}`, withFetchDispatcher({

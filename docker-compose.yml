@@ -22,6 +22,8 @@ services:
       # for non-root users, so mount into the node user's home instead.
       - ${HOME}/.codex:/home/node/.codex
       - ${HOME}/.gemini:/home/node/.gemini
+      # Share host's OpenCode auth so the proxy can register the opencode-go adapter.
+      - ${HOME}/.local/share/opencode:/home/node/.local/share/opencode
     restart: unless-stopped
     env_file:
       - .env

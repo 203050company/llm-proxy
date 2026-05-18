@@ -14,7 +14,7 @@ import {
 import { triggerImmediateRefresh } from "../models/model-fetcher.js";
 import { getConfig } from "../config.js";
 import type { ApiKeyPool } from "../auth/api-key-pool.js";
-import { getOpencodeGoModelAliases } from "../proxy/opencode-go-upstream.js";
+import { getOpencodeGoModelAlias, getOpencodeGoModelAliases } from "../proxy/opencode-go-upstream.js";
 
 // --- Routes ---
 
@@ -167,6 +167,11 @@ export function createModelRoutes(apiKeyPool?: ApiKeyPool): Hono {
 
     if (apiKeyPool?.hasActiveModel(modelId)) {
       return c.json(toRuntimeOpenAIModel(modelId));
+    }
+
+    const opencodeModel = getOpencodeGoModelAlias(modelId);
+    if (opencodeModel) {
+      return c.json(toOpencodeGoOpenAIModel({ ...opencodeModel, alias: modelId }));
     }
 
     c.status(404);
