@@ -4,16 +4,16 @@
  * Premature stream close (upstream-side) and client abort (downstream-side) are
  * recurring failure modes that previously left only an ad-hoc `console.warn`
  * trail in the dev tee log. This helper persists every close event through
- * both observability channels:
+ * the request audit channel:
  *
- *   - `appendErrorLog` → `data/error-log.jsonl` → Errors tab + unread badge
  *   - `enqueueLogEntry` → in-memory audit log (admin /api/logs)
  *
- * Same context shape for both so the dashboard and the audit feed can be
- * cross-referenced by rid + ts when diagnosing a recurrence.
+ * Stream close events are request/transport diagnostics, not uncaught app
+ * crashes. Keeping them out of `data/error-log.jsonl` prevents normal client
+ * cancellations and transient upstream disconnects from raising the dashboard
+ * Errors badge.
  */
 
-import { appendErrorLog } from "./error-log.js";
 import { enqueueLogEntry } from "./entry.js";
 
 export type StreamCloseKind =
@@ -24,7 +24,7 @@ export type StreamCloseKind =
 
 /** Caller-provided diagnostic context that travels with a streaming request.
  *  Optional fields are filled in opportunistically — missing context still
- *  produces a useful Errors-tab entry, callers should pass what they have. */
+ *  produces a useful audit entry, callers should pass what they have. */
 export interface StreamCloseContextBase {
   requestId?: string | null;
   tag?: string | null;
@@ -54,13 +54,6 @@ export interface StreamCloseEvent extends StreamCloseContextBase {
   upstreamStatus?: number | string | null;
 }
 
-const ERROR_NAMES: Readonly<Record<StreamCloseKind, string>> = {
-  "client-abort": "StreamClientAbort",
-  "client-write-failed": "StreamClientWriteFailed",
-  "upstream-error": "StreamUpstreamError",
-  "upstream-premature": "StreamUpstreamPrematureClose",
-};
-
 const BASE_MESSAGES: Readonly<Record<StreamCloseKind, string>> = {
   "client-abort": "Client aborted stream",
   "client-write-failed": "Client disconnected mid-stream (write failed)",
@@ -77,40 +70,13 @@ function prune<T extends object>(obj: T): Partial<T> {
   return out;
 }
 
-/** Persist a stream-close event into both the local error log (Errors tab)
- *  and the in-memory audit log. Never throws — logging failures inside the
- *  helpers swallow themselves. */
+/** Persist a stream-close event into the in-memory audit log. Never throws —
+ *  logging failures inside the helper swallow themselves. */
 export function recordStreamCloseEvent(evt: StreamCloseEvent): void {
-  const name = ERROR_NAMES[evt.kind];
   const base = BASE_MESSAGES[evt.kind];
   const message = evt.detail ? `${base}: ${evt.detail}` : base;
   const numericStatus =
     typeof evt.upstreamStatus === "number" ? evt.upstreamStatus : null;
-
-  appendErrorLog({
-    source: "server",
-    error: { name, message },
-    context: prune({
-      kind: evt.kind,
-      requestId: evt.requestId,
-      tag: evt.tag,
-      provider: evt.provider,
-      path: evt.path,
-      model: evt.model,
-      accountEntryId: evt.accountEntryId,
-      variantHash: evt.variantHash,
-      responseId: evt.responseId,
-      eventCount: evt.eventCount,
-      hadReasoning: evt.hadReasoning,
-      closeCode: evt.closeCode,
-      writtenChunks: evt.writtenChunks,
-      writtenBytes: evt.writtenBytes,
-      lastSentEvent: evt.lastSentEvent,
-      sentTerminal: evt.sentTerminal,
-      upstreamStatus: evt.upstreamStatus,
-      detail: evt.detail,
-    }),
-  });
 
   enqueueLogEntry({
     requestId: evt.requestId ?? "stream-close",

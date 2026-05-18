@@ -42,6 +42,26 @@ function codexPartToAnthropic(part: CodexContentPart): AnthropicContentBlock {
   return { type: "image", source: { type: "url", url: part.image_url } };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function normalizeTool(tool: unknown): unknown {
+  if (!isRecord(tool)) return tool;
+  if (tool.type !== "function" || typeof tool.name !== "string") return tool;
+
+  const converted: Record<string, unknown> = { name: tool.name };
+  if (typeof tool.description === "string") converted.description = tool.description;
+  converted.input_schema = isRecord(tool.parameters) ? tool.parameters : { type: "object", properties: {} };
+  return converted;
+}
+
+function normalizeToolChoice(choice: unknown): unknown {
+  if (!isRecord(choice)) return choice;
+  if (choice.type !== "function" || typeof choice.name !== "string") return choice;
+  return { type: "tool", name: choice.name };
+}
+
 function inputItemsToAnthropicMessages(input: CodexInputItem[]): AnthropicMessage[] {
   const messages: AnthropicMessage[] = [];
 
@@ -107,7 +127,7 @@ export function translateCodexToAnthropicRequest(
   const body: AnthropicMessageRequest = {
     model: modelId,
     messages,
-    max_tokens: 8192,
+    max_tokens: req.max_output_tokens ?? 8192,
     stream: req.stream,
   };
 
@@ -122,9 +142,9 @@ export function translateCodexToAnthropicRequest(
   }
 
   if (req.tools?.length) {
-    body.tools = req.tools;
+    body.tools = req.tools.map(normalizeTool);
     if (req.tool_choice !== undefined) {
-      body.tool_choice = req.tool_choice;
+      body.tool_choice = normalizeToolChoice(req.tool_choice);
     }
   }
 

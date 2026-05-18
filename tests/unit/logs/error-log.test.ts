@@ -189,6 +189,34 @@ describe("readErrorLog", () => {
   });
 });
 
+describe("visible dashboard error log entries", () => {
+  it("filters historical stream-close diagnostics out of the Errors tab view", async () => {
+    const { appendErrorLog, getDashboardErrorLogEntries, getUnreadCount, readErrorLog } = await importErrorLog();
+    appendErrorLog({
+      source: "server",
+      error: { name: "StreamClientAbort", message: "Client aborted stream" },
+      context: { kind: "client-abort", requestId: "rid-client" },
+    });
+    appendErrorLog({
+      source: "server",
+      error: { name: "StreamUpstreamError", message: "WebSocket closed before terminal event: code=1006" },
+      context: { kind: "upstream-error", requestId: "rid-upstream" },
+    });
+    appendErrorLog({
+      source: "renderer",
+      error: { name: "TypeError", message: "Cannot read properties of undefined", stack: "at App.tsx:10:1" },
+    });
+
+    const entries = readErrorLog();
+    expect(entries).toHaveLength(3);
+
+    const visibleEntries = getDashboardErrorLogEntries(entries);
+    expect(visibleEntries).toHaveLength(1);
+    expect(visibleEntries[0].error.name).toBe("TypeError");
+    expect(getUnreadCount(visibleEntries)).toBe(1);
+  });
+});
+
 describe("groupErrorLog", () => {
   it("groups by error.name + first non-empty stack line", async () => {
     const { groupErrorLog } = await importErrorLog();

@@ -116,4 +116,69 @@ describe("translateCodexToOpenAIRequest", () => {
     const result = translateCodexToOpenAIRequest(req, "gpt-4o", false);
     expect(result.response_format).toEqual({ type: "json_object" });
   });
+
+  it("validates tool_calls ordering - drops orphaned tool messages", () => {
+    const req = makeBaseRequest({
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "func_a",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "result",
+        },
+        // Orphaned tool message without matching assistant tool_call
+        {
+          type: "function_call_output",
+          call_id: "call_orphan",
+          output: "orphan result",
+        },
+      ],
+    });
+    const result = translateCodexToOpenAIRequest(req, "gpt-4o", false);
+    const toolMessages = result.messages.filter((m) => m.role === "tool");
+    expect(toolMessages).toHaveLength(1);
+    expect(toolMessages[0].tool_call_id).toBe("call_1");
+  });
+
+  it("validates tool_calls ordering - handles multiple assistant turns", () => {
+    const req = makeBaseRequest({
+      input: [
+        {
+          type: "function_call",
+          call_id: "call_1",
+          name: "func_a",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_1",
+          output: "result",
+        },
+        { role: "user", content: "next" },
+        {
+          type: "function_call",
+          call_id: "call_2",
+          name: "func_b",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "call_2",
+          output: "result2",
+        },
+      ],
+    });
+    const result = translateCodexToOpenAIRequest(req, "gpt-4o", false);
+    const assistantMessages = result.messages.filter((m) => m.role === "assistant");
+    const toolMessages = result.messages.filter((m) => m.role === "tool");
+    expect(assistantMessages).toHaveLength(2);
+    expect(toolMessages).toHaveLength(2);
+    expect(toolMessages[0].tool_call_id).toBe("call_1");
+    expect(toolMessages[1].tool_call_id).toBe("call_2");
+  });
 });
