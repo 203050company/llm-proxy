@@ -15,6 +15,7 @@ import type { CodexInputItem, CodexContentPart, CodexResponsesRequest } from "..
 interface OpenAIMessage {
   role: "system" | "user" | "assistant" | "tool";
   content?: string | OpenAIContentPart[] | null;
+  reasoning_content?: string;
   tool_calls?: OpenAIToolCall[];
   tool_call_id?: string;
   name?: string;
@@ -30,6 +31,45 @@ interface OpenAIToolCall {
   id: string;
   type: "function";
   function: { name: string; arguments: string };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Validate and fix message ordering for OpenAI API compatibility.
+ * DeepSeek (and other strict providers) require:
+ * - assistant messages with tool_calls must be followed by tool messages
+ * - tool messages must reference existing tool_calls
+ */
+function validateAndFixToolCalls(messages: OpenAIMessage[]): OpenAIMessage[] {
+  const fixed: OpenAIMessage[] = [];
+  const pendingToolCallIds = new Set<string>();
+
+  for (const msg of messages) {
+    if (msg.role === "assistant" && Array.isArray(msg.tool_calls)) {
+      // Clear previous pending calls - this is a new assistant turn
+      pendingToolCallIds.clear();
+      for (const tc of msg.tool_calls) {
+        pendingToolCallIds.add(tc.id);
+      }
+      fixed.push(msg);
+    } else if (msg.role === "tool") {
+      // Only include tool messages that reference pending tool calls
+      if (pendingToolCallIds.has(msg.tool_call_id!)) {
+        pendingToolCallIds.delete(msg.tool_call_id!);
+        fixed.push(msg);
+      }
+      // Drop orphaned tool messages
+    } else {
+      // Non-tool, non-assistant messages clear pending state
+      pendingToolCallIds.clear();
+      fixed.push(msg);
+    }
+  }
+
+  return fixed;
 }
 
 /** Outgoing OpenAI chat completions request body. */
@@ -60,7 +100,11 @@ function inputItemsToMessages(input: CodexInputItem[]): OpenAIMessage[] {
       const role = item.role as "user" | "assistant" | "system";
       const oaiRole = role === "system" ? "system" as const : role;
       if (typeof item.content === "string") {
-        messages.push({ role: oaiRole, content: item.content });
+        const msg: OpenAIMessage = { role: oaiRole, content: item.content };
+        if (role === "assistant" && "reasoning_content" in item) {
+          msg.reasoning_content = item.reasoning_content;
+        }
+        messages.push(msg);
       } else {
         messages.push({ role: oaiRole, content: contentPartsToOpenAI(item.content) });
       }
@@ -89,6 +133,25 @@ function inputItemsToMessages(input: CodexInputItem[]): OpenAIMessage[] {
   return messages;
 }
 
+function normalizeTool(tool: unknown): unknown {
+  if (!isRecord(tool)) return tool;
+  if (tool.type !== "function" || isRecord(tool.function)) return tool;
+  if (typeof tool.name !== "string") return tool;
+
+  const fn: Record<string, unknown> = { name: tool.name };
+  if (typeof tool.description === "string") fn.description = tool.description;
+  if (isRecord(tool.parameters)) fn.parameters = tool.parameters;
+  if (typeof tool.strict === "boolean") fn.strict = tool.strict;
+  return { type: "function", function: fn };
+}
+
+function normalizeToolChoice(choice: unknown): unknown {
+  if (!isRecord(choice)) return choice;
+  if (choice.type !== "function" || isRecord(choice.function)) return choice;
+  if (typeof choice.name !== "string") return choice;
+  return { type: "function", function: { name: choice.name } };
+}
+
 /**
  * Build an OpenAI chat completions request body from a CodexResponsesRequest.
  * `streaming` controls whether stream_options.include_usage is added.
@@ -107,9 +170,12 @@ export function translateCodexToOpenAIRequest(
 
   messages.push(...inputItemsToMessages(req.input));
 
+  // Validate and fix tool_calls ordering for strict providers (DeepSeek, etc.)
+  const validatedMessages = validateAndFixToolCalls(messages);
+
   const body: OpenAIChatRequest = {
     model: modelId,
-    messages,
+    messages: validatedMessages,
     stream: streaming,
   };
 
@@ -124,10 +190,14 @@ export function translateCodexToOpenAIRequest(
 
   // Tools
   if (req.tools?.length) {
-    body.tools = req.tools;
+    body.tools = req.tools.map(normalizeTool);
     if (req.tool_choice !== undefined) {
-      body.tool_choice = req.tool_choice;
+      body.tool_choice = normalizeToolChoice(req.tool_choice);
     }
+  }
+
+  if (typeof req.max_output_tokens === "number") {
+    body.max_completion_tokens = req.max_output_tokens;
   }
 
   // Response format (JSON mode / structured outputs)

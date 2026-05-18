@@ -48,6 +48,7 @@ import { OpenAIUpstream } from "./proxy/openai-upstream.js";
 import { AnthropicUpstream } from "./proxy/anthropic-upstream.js";
 import { GeminiUpstream } from "./proxy/gemini-upstream.js";
 import { GeminiCodeAssistUpstream } from "./proxy/gemini-code-assist-upstream.js";
+import { OpencodeGoUpstream, resolveOpencodeGoAuth } from "./proxy/opencode-go-upstream.js";
 import { ApiKeyPool } from "./auth/api-key-pool.js";
 import { createApiKeyRoutes } from "./routes/api-keys.js";
 import { createAdapterForEntry } from "./proxy/adapter-factory.js";
@@ -157,6 +158,11 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   if (cfg.providers.gemini) {
     adapters.set("gemini", new GeminiUpstream(cfg.providers.gemini.api_key));
     console.log("[Init] Gemini upstream configured");
+  }
+  const opencodeGoAuth = resolveOpencodeGoAuth();
+  if (opencodeGoAuth.apiKey) {
+    adapters.set("opencode-go", new OpencodeGoUpstream(opencodeGoAuth.apiKey));
+    console.log(`[Init] opencode-go upstream configured (${opencodeGoAuth.source}; key=${opencodeGoAuth.redacted})`);
   }
   for (const [name, provider] of Object.entries(cfg.providers.custom)) {
     adapters.set(name, new OpenAIUpstream(name, provider.api_key, provider.base_url));

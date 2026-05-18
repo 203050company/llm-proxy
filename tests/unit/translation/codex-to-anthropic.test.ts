@@ -13,6 +13,15 @@ import {
   multiToolCallStream,
   usageStream,
 } from "@fixtures/sse-streams.js";
+import {
+  createCompleted,
+  createCreated,
+  createFunctionCallDelta,
+  createFunctionCallDone,
+  createFunctionCallStart,
+  createInProgress,
+  createTextDelta,
+} from "@helpers/events.js";
 
 let mockEvents: ExtractedEvent[] = [];
 
@@ -233,6 +242,35 @@ describe("streamCodexToAnthropic — tool_use block structure", () => {
       (e, i) => i > toolStartIdx && e.event === "content_block_stop",
     );
     expect(stopIdx).toBeGreaterThan(toolStartIdx);
+  });
+
+  it("does not start a text block while a tool_use block is pending", async () => {
+    const chunks = await collectStreamOutput([
+      createCreated("resp_interleaved"),
+      createInProgress("resp_interleaved"),
+      createFunctionCallStart("call_read", "Read", 0),
+      createFunctionCallDelta("call_read", '{"file_path":'),
+      createTextDelta("Reading the file now."),
+      createFunctionCallDelta("call_read", '"/tmp/a.ts"}'),
+      createFunctionCallDone("call_read", "Read", '{"file_path":"/tmp/a.ts"}'),
+      createCompleted("resp_interleaved", { input_tokens: 12, output_tokens: 8 }),
+    ]);
+    const events = parseSSEEvents(chunks);
+    const toolStartIdx = events.findIndex(
+      (e) => e.event === "content_block_start" && (e.data.content_block as Record<string, unknown>)?.type === "tool_use",
+    );
+    const toolStopIdx = events.findIndex(
+      (e, i) => i > toolStartIdx && e.event === "content_block_stop",
+    );
+    const textStartIdx = events.findIndex(
+      (e) => e.event === "content_block_start" && (e.data.content_block as Record<string, unknown>)?.type === "text",
+    );
+
+    expect(toolStartIdx).toBeGreaterThan(-1);
+    expect(toolStopIdx).toBeGreaterThan(toolStartIdx);
+    expect(textStartIdx).toBeGreaterThan(toolStopIdx);
+    expect(events[toolStartIdx].data.index).toBe(0);
+    expect(events[textStartIdx].data.index).toBe(1);
   });
 });
 

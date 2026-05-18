@@ -31,10 +31,9 @@ function makeOpenAIFormat(wantReasoning: boolean): FormatAdapter {
   return {
     tag: "Chat",
     noAccountStatus: 503,
-    formatNoAccount: () => ({
+    formatNoAccount: (message = "No available accounts. All accounts are expired or rate-limited.") => ({
       error: {
-        message:
-          "No available accounts. All accounts are expired or rate-limited.",
+        message,
         type: "server_error",
         param: null,
         code: "no_available_accounts",

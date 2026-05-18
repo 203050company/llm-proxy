@@ -14,6 +14,7 @@ import {
 import { triggerImmediateRefresh } from "../models/model-fetcher.js";
 import { getConfig } from "../config.js";
 import type { ApiKeyPool } from "../auth/api-key-pool.js";
+import { getOpencodeGoModelAlias, getOpencodeGoModelAliases } from "../proxy/opencode-go-upstream.js";
 
 // --- Routes ---
 
@@ -65,6 +66,18 @@ function toRuntimeOpenAIModel(id: string): OpenAIModel {
     object: "model",
     created: MODEL_CREATED_TIMESTAMP,
     owned_by: "openai",
+  };
+}
+
+function toOpencodeGoOpenAIModel(model: { alias: string; displayName: string }): OpenAIModel & { created_at: string } {
+  return {
+    id: model.alias,
+    object: "model",
+    type: "model",
+    display_name: model.displayName,
+    created: MODEL_CREATED_TIMESTAMP,
+    created_at: new Date(MODEL_CREATED_TIMESTAMP * 1000).toISOString(),
+    owned_by: "opencode-go",
   };
 }
 
@@ -126,6 +139,9 @@ export function createModelRoutes(apiKeyPool?: ApiKeyPool): Hono {
     for (const modelId of apiKeyPool?.getActiveModels() ?? []) {
       modelsById.set(modelId, toRuntimeOpenAIModel(modelId));
     }
+    for (const model of getOpencodeGoModelAliases()) {
+      modelsById.set(model.alias, toOpencodeGoOpenAIModel(model));
+    }
 
     const response: OpenAIModelList = { object: "list", data: [...modelsById.values()] };
     return c.json(response);
@@ -151,6 +167,11 @@ export function createModelRoutes(apiKeyPool?: ApiKeyPool): Hono {
 
     if (apiKeyPool?.hasActiveModel(modelId)) {
       return c.json(toRuntimeOpenAIModel(modelId));
+    }
+
+    const opencodeModel = getOpencodeGoModelAlias(modelId);
+    if (opencodeModel) {
+      return c.json(toOpencodeGoOpenAIModel({ ...opencodeModel, alias: modelId }));
     }
 
     c.status(404);

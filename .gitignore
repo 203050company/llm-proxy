@@ -8,6 +8,7 @@ public/
 docs/
 bin/*
 !bin/README.md
+!bin/cc-opencode
 .env
 *.log
 .asar-out/

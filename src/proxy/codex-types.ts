@@ -91,7 +91,7 @@ export type CodexContentPart =
 
 export type CodexInputItem =
   | { role: "user"; content: string | CodexContentPart[] }
-  | { role: "assistant"; content: string }
+  | { role: "assistant"; content: string; reasoning_content?: string }
   | { role: "system"; content: string }
   | { type: "function_call"; id?: string; call_id: string; name: string; arguments: string }
   | { type: "function_call_output"; call_id: string; output: string };

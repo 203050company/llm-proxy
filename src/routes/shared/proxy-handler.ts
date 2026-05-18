@@ -73,7 +73,7 @@ export interface ResponseMetadata {
 export interface FormatAdapter {
   tag: string;
   noAccountStatus: StatusCode;
-  formatNoAccount: () => unknown;
+  formatNoAccount: (message?: string) => unknown;
   format429: (message: string) => unknown;
   formatError: (status: number, message: string) => unknown;
   formatStreamError?: (status: number, message: string) => string;
@@ -122,6 +122,37 @@ export interface HandleDirectRequestOptions {
   fmt: FormatAdapter;
   apiKeyPool?: ApiKeyPool;
   apiKeyEntryId?: string;
+}
+
+function describeAvailability(accountPool: AccountPool, model: string, excludeEntryIds: string[] = []): string {
+  const reporter = accountPool as AccountPool & {
+    explainAvailability?: (options?: { model?: string; excludeIds?: string[] }) => ReturnType<AccountPool["explainAvailability"]>;
+  };
+  const explanation = reporter.explainAvailability?.({ model, excludeIds: excludeEntryIds });
+  if (!explanation) {
+    const summary = accountPool.getPoolSummary();
+    const excluded = excludeEntryIds.length > 0 ? `, excluded=${excludeEntryIds.length}` : "";
+    return `Account availability for ${model}: total=${summary.total}, active=${summary.active}, expired=${summary.expired}, quota_exhausted=${summary.quota_exhausted}, rate_limited=${summary.rate_limited}, refreshing=${summary.refreshing}, disabled=${summary.disabled}, banned=${summary.banned}${excluded}.`;
+  }
+  const parts: string[] = [];
+  const push = (count: number, label: string): void => {
+    if (count > 0) parts.push(`${count} ${label}`);
+  };
+  push(explanation.quotaExhausted + explanation.quotaExhaustedStatus, "quota-exhausted");
+  push(explanation.expired, "expired");
+  push(explanation.concurrencyFull, "concurrency-full");
+  push(explanation.modelPlanMismatch, "plan-mismatch");
+  push(explanation.excludedByRetry, "already-tried");
+  push(explanation.refreshing, "refreshing");
+  push(explanation.disabled, "disabled");
+  push(explanation.banned, "banned");
+  push(explanation.rateLimitedStatus, "rate-limited");
+
+  const detail = parts.length > 0 ? ` (${parts.join(", ")})` : "";
+  const plans = explanation.preferredPlans.length > 0
+    ? `; plans: ${explanation.preferredPlans.join(", ")}`
+    : "";
+  return `No available accounts for model "${model}": ${explanation.eligible}/${explanation.total} eligible${detail}${plans}.`;
 }
 
 const MAX_EMPTY_RETRIES = 2;
@@ -466,7 +497,7 @@ export async function handleProxyRequest(options: HandleProxyRequestOptions): Pr
   const acquired = acquireAccount(accountPool, req.codexRequest.model, undefined, fmt.tag, preferredEntryId ?? undefined);
   if (!acquired) {
     c.status(fmt.noAccountStatus);
-    return c.json(fmt.formatNoAccount());
+    return c.json(fmt.formatNoAccount(describeAvailability(accountPool, req.codexRequest.model)));
   }
 
   let { entryId } = acquired;
@@ -786,6 +817,7 @@ export async function handleProxyRequest(options: HandleProxyRequestOptions): Pr
           codexApi = nextApi;
           if (!triedEntryIds.includes(nextEntryId)) triedEntryIds.push(nextEntryId);
         },
+        triedEntryIds,
         variantHash,
       });
     } catch (err) {
@@ -927,6 +959,7 @@ interface HandleNonStreamingOptions {
   restoreImplicitResumeRequest?: () => void;
   buildPoolCtx?: (forEntryId: string) => WsPoolContext | undefined;
   setActiveAccount?: (entryId: string, api: CodexApi) => void;
+  triedEntryIds: string[];
   variantHash?: string;
 }
 
@@ -951,6 +984,7 @@ async function handleNonStreaming(options: HandleNonStreamingOptions): Promise<R
     restoreImplicitResumeRequest,
     buildPoolCtx,
     setActiveAccount,
+    triedEntryIds,
     variantHash,
   } = options;
   let currentEntryId = initialEntryId;
@@ -1039,10 +1073,14 @@ async function handleNonStreaming(options: HandleNonStreamingOptions): Promise<R
         releaseAccount(accountPool, currentEntryId, annotateImageGenOutcome(collectErr.usage, req.expectsImageGen), released);
         restoreImplicitResumeRequest?.();
 
-        const newAcquired = acquireAccount(accountPool, req.codexRequest.model, undefined, fmt.tag);
+        const retryExcludeIds = Array.from(new Set([...triedEntryIds, currentEntryId]));
+        const newAcquired = acquireAccount(accountPool, req.codexRequest.model, retryExcludeIds, fmt.tag);
         if (!newAcquired) {
           c.status(502);
-          return c.json(fmt.formatError(502, "Codex returned an empty response and no other accounts are available for retry"));
+          return c.json(fmt.formatError(
+            502,
+            `Codex returned an empty response and no other accounts are available for retry. ${describeAvailability(accountPool, req.codexRequest.model, retryExcludeIds)}`,
+          ));
         }
 
         currentEntryId = newAcquired.entryId;

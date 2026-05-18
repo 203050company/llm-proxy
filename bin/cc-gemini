@@ -2,30 +2,37 @@
 
 # --- Configuration ---
 PORT=8080
-BASE_URL="http://localhost:$PORT"
+BASE_URL="http://127.0.0.1:$PORT"
 MODEL="gemini-3.1-pro" # Real model name
 
-# Get the real directory of this script, following symlinks
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do
-    DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-    SOURCE="$(readlink "$SOURCE")"
-    [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
-PROJECT_ROOT="$( dirname "$SCRIPT_DIR" )"
+llm_proxy_root() {
+    if [ -f "$HOME/llm-proxy/docker-compose.yml" ]; then
+        printf '%s\n' "$HOME/llm-proxy"
+        return
+    fi
+
+    SOURCE="${BASH_SOURCE[0]}"
+    while [ -h "$SOURCE" ]; do
+        DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+        SOURCE="$(readlink "$SOURCE")"
+        [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+    done
+    SCRIPT_DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
+    dirname "$SCRIPT_DIR"
+}
 
 # --- Check and Start Proxy ---
-if ! curl -s "http://localhost:$PORT/health" > /dev/null; then
-    echo "Proxy server is not responding at port $PORT. Starting via docker-compose..."
+if ! curl -s "$BASE_URL/health" > /dev/null; then
+    echo "llm-proxy is not responding at port $PORT. Starting shared proxy..."
 
+    PROJECT_ROOT="$(llm_proxy_root)"
     cd "$PROJECT_ROOT" || exit 1
     docker compose up -d
     
     echo "Waiting for proxy to be ready..."
     MAX_RETRIES=30
     RETRY_COUNT=0
-    while ! curl -s "http://localhost:$PORT/health" > /dev/null; do
+    while ! curl -s "$BASE_URL/health" > /dev/null; do
         sleep 1
         RETRY_COUNT=$((RETRY_COUNT+1))
         if [ $RETRY_COUNT -ge $MAX_RETRIES ]; then
@@ -70,6 +77,33 @@ console.log(`Applied Gemini CLI auth for ${email}`);
 
 sync_gemini_cli_auth
 
+prepare_agent_view_config() {
+    local agent_config_dir="$HOME/.claude-agent-view/gemini"
+    local shared_entry
+
+    mkdir -p "$agent_config_dir" "$agent_config_dir/daemon" "$agent_config_dir/jobs" "$agent_config_dir/projects"
+    for shared_entry in \
+        settings.json \
+        settings.local.json \
+        CLAUDE.md \
+        commands \
+        plugins \
+        skills \
+        hooks \
+        scripts \
+        bin \
+        awesome-statusline.sh \
+        .credentials.json \
+        .buddy-reroll.json
+    do
+        if [[ -e "$HOME/.claude/$shared_entry" && ! -e "$agent_config_dir/$shared_entry" && ! -L "$agent_config_dir/$shared_entry" ]]; then
+            ln -s "$HOME/.claude/$shared_entry" "$agent_config_dir/$shared_entry"
+        fi
+    done
+
+    printf '%s\n' "$agent_config_dir"
+}
+
 # --- Start Claude Code session ---
 export ANTHROPIC_BASE_URL="$BASE_URL"
 export ANTHROPIC_API_KEY="sk-ant-abc-123" # Dummy key
@@ -87,4 +121,6 @@ if [ "${CC_GEMINI_BARE:-1}" != "0" ]; then
         *) CLAUDE_ARGS+=(--bare) ;;
     esac
 fi
+export CLAUDE_CONFIG_DIR
+CLAUDE_CONFIG_DIR="$(prepare_agent_view_config)"
 claude "${CLAUDE_ARGS[@]}" "$@"

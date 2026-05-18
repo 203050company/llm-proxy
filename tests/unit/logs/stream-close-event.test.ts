@@ -1,8 +1,8 @@
 /**
  * Tests for recordStreamCloseEvent — the structured persistence layer for
- * premature stream close / client abort events. Verifies both downstream
- * sinks (Errors-tab error log + in-memory audit log) receive a record with
- * the caller-supplied diagnostic context.
+ * premature stream close / client abort events. Verifies request-stream
+ * diagnostics stay in the audit log instead of surfacing as app crashes in
+ * the Errors tab.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
@@ -61,7 +61,7 @@ function readErrorLogLines(): Array<Record<string, unknown>> {
 }
 
 describe("recordStreamCloseEvent", () => {
-  it("writes an Errors-tab entry and an audit log entry for upstream-premature", async () => {
+  it("writes an audit log entry only for upstream-premature", async () => {
     const { recordStreamCloseEvent, logStore } = await importAll();
     recordStreamCloseEvent({
       kind: "upstream-premature",
@@ -77,27 +77,7 @@ describe("recordStreamCloseEvent", () => {
       closeCode: 1006,
     });
 
-    const errEntries = readErrorLogLines();
-    expect(errEntries).toHaveLength(1);
-    const err = errEntries[0];
-    expect(err.source).toBe("server");
-    const errBody = err.error as Record<string, unknown>;
-    expect(errBody.name).toBe("StreamUpstreamPrematureClose");
-    expect(errBody.message).toContain("Upstream stream closed before terminal event");
-    expect(errBody.message).toContain("code=1006");
-    const ctx = err.context as Record<string, unknown>;
-    expect(ctx).toMatchObject({
-      kind: "upstream-premature",
-      requestId: "rid-abc",
-      tag: "Responses",
-      model: "gpt-5.5",
-      accountEntryId: "e-42",
-      responseId: "resp_pc",
-      variantHash: "vh-deadbeef",
-      eventCount: 1920,
-      hadReasoning: true,
-      closeCode: 1006,
-    });
+    expect(readErrorLogLines()).toEqual([]);
 
     await flushMicrotasks();
     const audit = logStore.list({ limit: 50 });
@@ -121,7 +101,7 @@ describe("recordStreamCloseEvent", () => {
     });
   });
 
-  it("emits a client-abort entry with the correct name and message", async () => {
+  it("emits a client-abort audit entry without writing an Errors-tab entry", async () => {
     const { recordStreamCloseEvent, logStore } = await importAll();
     recordStreamCloseEvent({
       kind: "client-abort",
@@ -132,11 +112,7 @@ describe("recordStreamCloseEvent", () => {
       variantHash: "vh-cafef00d",
     });
 
-    const errEntries = readErrorLogLines();
-    expect(errEntries).toHaveLength(1);
-    const errBody = errEntries[0].error as Record<string, unknown>;
-    expect(errBody.name).toBe("StreamClientAbort");
-    expect(errBody.message).toBe("Client aborted stream");
+    expect(readErrorLogLines()).toEqual([]);
 
     await flushMicrotasks();
     const audit = logStore.list({ limit: 50 });
@@ -162,18 +138,7 @@ describe("recordStreamCloseEvent", () => {
       detail: "socket hang up",
     });
 
-    const errEntries = readErrorLogLines();
-    expect(errEntries).toHaveLength(1);
-    const errBody = errEntries[0].error as Record<string, unknown>;
-    expect(errBody.name).toBe("StreamClientWriteFailed");
-    expect(errBody.message).toContain("socket hang up");
-    const ctx = errEntries[0].context as Record<string, unknown>;
-    expect(ctx).toMatchObject({
-      writtenChunks: 12,
-      writtenBytes: 3456,
-      lastSentEvent: "response.output_text.delta",
-      sentTerminal: false,
-    });
+    expect(readErrorLogLines()).toEqual([]);
 
     await flushMicrotasks();
     const audit = logStore.list({ limit: 50 });
@@ -217,12 +182,7 @@ describe("recordStreamCloseEvent", () => {
       status: 502,
     });
 
-    const errEntries = readErrorLogLines();
-    const ctx = errEntries[0].context as Record<string, unknown>;
-    expect(ctx).toMatchObject({
-      provider: "openai",
-      path: "/v1/responses",
-    });
+    expect(readErrorLogLines()).toEqual([]);
   });
 
   it("falls back to a synthetic requestId when none is provided", async () => {
@@ -234,9 +194,6 @@ describe("recordStreamCloseEvent", () => {
     expect(audit.records).toHaveLength(1);
     expect(audit.records[0].requestId).toBe("stream-close");
 
-    const errEntries = readErrorLogLines();
-    expect(errEntries).toHaveLength(1);
-    const ctx = errEntries[0].context as Record<string, unknown>;
-    expect(ctx).not.toHaveProperty("requestId");
+    expect(readErrorLogLines()).toEqual([]);
   });
 });

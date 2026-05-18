@@ -76,4 +76,45 @@ describe("translateCodexToAnthropicRequest", () => {
     const result = translateCodexToAnthropicRequest(req, "claude-3-5-haiku-20241022");
     expect(result.max_tokens).toBeGreaterThan(0);
   });
+
+  it("maps max_output_tokens to max_tokens", () => {
+    const req = makeBaseRequest({
+      input: [{ role: "user", content: "short" }],
+      max_output_tokens: 512,
+    });
+
+    const result = translateCodexToAnthropicRequest(req, "claude-3-5-sonnet-20241022");
+
+    expect(result.max_tokens).toBe(512);
+  });
+
+  it("normalizes flat Codex function tools to Anthropic tool schema", () => {
+    const req = makeBaseRequest({
+      input: [{ role: "user", content: "read" }],
+      tools: [{
+        type: "function",
+        name: "Read",
+        description: "Read a file",
+        parameters: {
+          type: "object",
+          properties: { path: { type: "string" } },
+          required: ["path"],
+        },
+      }],
+      tool_choice: { type: "function", name: "Read" },
+    });
+
+    const result = translateCodexToAnthropicRequest(req, "claude-3-5-sonnet-20241022");
+
+    expect(result.tools).toEqual([{
+      name: "Read",
+      description: "Read a file",
+      input_schema: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+    }]);
+    expect(result.tool_choice).toEqual({ type: "tool", name: "Read" });
+  });
 });

@@ -82,15 +82,14 @@ describe("GET /admin/error-logs", () => {
     expect(rangeErr.count).toBe(1);
   });
 
-  it("includes sample context in grouped errors for dashboard diagnostics", async () => {
+  it("includes sample context in grouped app errors for dashboard diagnostics", async () => {
     const { appendErrorLog } = await import("@src/logs/error-log.js");
     appendErrorLog({
       source: "server",
-      error: { name: "StreamUpstreamPrematureClose", message: "closed early" },
+      error: { name: "TypeError", message: "render boom", stack: "at App.tsx:42" },
       context: {
-        requestId: "rid-stream-1",
-        accountEntryId: "acct-42",
-        variantHash: "vh-cafef00d",
+        route: "/settings",
+        component: "AccountManagement",
       },
     });
 
@@ -102,13 +101,33 @@ describe("GET /admin/error-logs", () => {
       groups: Array<{ name: string; sample_context?: Record<string, unknown> }>;
     };
     expect(body.groups[0]).toMatchObject({
-      name: "StreamUpstreamPrematureClose",
+      name: "TypeError",
       sample_context: {
+        route: "/settings",
+        component: "AccountManagement",
+      },
+    });
+  });
+
+  it("hides historical stream-close diagnostics from grouped dashboard errors", async () => {
+    const { appendErrorLog } = await import("@src/logs/error-log.js");
+    appendErrorLog({
+      source: "server",
+      error: { name: "StreamUpstreamPrematureClose", message: "closed early" },
+      context: {
+        kind: "upstream-premature",
         requestId: "rid-stream-1",
         accountEntryId: "acct-42",
         variantHash: "vh-cafef00d",
       },
     });
+
+    const app = await buildApp();
+    const res = await app.request("/admin/error-logs");
+    expect(res.status).toBe(200);
+
+    const body = await res.json() as { groups: unknown[] };
+    expect(body.groups).toEqual([]);
   });
 
   it("returns empty groups when no log exists", async () => {
