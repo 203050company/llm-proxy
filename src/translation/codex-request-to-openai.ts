@@ -64,7 +64,7 @@ function inputItemsToMessages(input: CodexInputItem[]): OpenAIMessage[] {
       const role = item.role as "user" | "assistant" | "system";
       const oaiRole = role === "system" ? "system" as const : role;
       if (typeof item.content === "string") {
-        messages.push({ role: oaiRole, content: item.content });
+        messages.push({ role: oaiRole, content: item.content, reasoning_content: item.reasoning_content });
       } else {
         messages.push({ role: oaiRole, content: contentPartsToOpenAI(item.content) });
       }
