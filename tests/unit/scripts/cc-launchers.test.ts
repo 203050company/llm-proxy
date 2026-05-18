@@ -84,10 +84,10 @@ describe("Claude Code launcher scripts", () => {
     expect(script).not.toContain('curl -s "$BASE_URL/admin/health"');
   });
 
-  it("cc-gemini keeps bare mode opt-in", () => {
+  it("cc-gemini defaults Claude Code to bare mode", () => {
     const script = readLauncher("cc-gemini");
 
-    expect(script).toContain("CC_GEMINI_BARE:-0");
+    expect(script).toContain("CC_GEMINI_BARE:-1");
     expect(script).toContain("CLAUDE_ARGS+=(--bare)");
     expect(script).toContain('claude "${CLAUDE_ARGS[@]}" "$@"');
   });
