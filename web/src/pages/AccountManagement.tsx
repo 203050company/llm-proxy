@@ -1,12 +1,9 @@
 import { useState, useCallback, useMemo } from "preact/hooks";
 import { useT } from "../../../shared/i18n/context";
 import { useAccounts } from "../../../shared/hooks/use-accounts";
-import { useGeminiAccounts } from "../../../shared/hooks/use-gemini-accounts";
 import { AccountTable } from "../components/AccountTable";
 import { AccountBulkActions } from "../components/AccountBulkActions";
 import { AccountImportExport } from "../components/AccountImportExport";
-import { GeminiAccountList } from "../components/GeminiAccountList";
-import { ProviderAccountSections } from "../components/ProviderAccountSections";
 import type { AssignmentAccount } from "../../../shared/hooks/use-proxy-assignments";
 import type { TranslationKey } from "../../../shared/i18n/translations";
 
@@ -24,7 +21,7 @@ const statusOrder: Array<{ key: string; label: TranslationKey }> = [
 export function AccountManagement({ embedded }: { embedded?: boolean } = {}) {
   const t = useT();
   const { list, loading: listLoading, batchDelete, batchSetStatus, toggleStatus, exportAccounts, importAccounts, persistenceHealth } = useAccounts();
-  const geminiAccounts = useGeminiAccounts();
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [statusFilter, setStatusFilter] = useState("all");
   const [message, setMessage] = useState<{ text: string; error?: boolean } | null>(null);
@@ -194,22 +191,7 @@ export function AccountManagement({ embedded }: { embedded?: boolean } = {}) {
     </>
   );
 
-  const content = (
-    <ProviderAccountSections
-      codex={codexContent}
-      gemini={(
-        <GeminiAccountList
-          accounts={geminiAccounts.list}
-          loading={geminiAccounts.loading}
-          refreshing={geminiAccounts.refreshing}
-          onRefresh={geminiAccounts.refresh}
-          onDelete={geminiAccounts.deleteAccount}
-          onHealthCheck={geminiAccounts.healthCheck}
-          onImportCli={geminiAccounts.importCli}
-        />
-      )}
-    />
-  );
+  const content = codexContent;
 
   if (embedded) return content;
 

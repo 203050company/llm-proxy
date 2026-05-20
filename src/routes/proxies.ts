@@ -18,12 +18,10 @@ import { Hono } from "hono";
 import yaml from "js-yaml";
 import type { ProxyPool } from "../proxy/proxy-pool.js";
 import type { AccountPool } from "../auth/account-pool.js";
-import type { GeminiAccountPool } from "../auth/gemini-account-pool.js";
 
 export function createProxyRoutes(
   proxyPool: ProxyPool,
   accountPool: AccountPool,
-  geminiPool?: GeminiAccountPool,
 ): Hono {
   const app = new Hono();
 
@@ -213,20 +211,9 @@ export function createProxyRoutes(
         proxyName: getAssignmentDisplayNameWithLegacyFallback(proxyPool, id, a.id),
       };
     });
-    const geminiAccounts = (geminiPool?.getMaskedAccounts() ?? []).map((a) => {
-      const id = `gemini:${a.id}`;
-      return {
-        id,
-        provider: "gemini",
-        email: a.email,
-        status: a.status,
-        proxyId: proxyPool.getAssignment(id),
-        proxyName: proxyPool.getAssignmentDisplayName(id),
-      };
-    });
 
     return c.json({
-      accounts: [...codexAccounts, ...geminiAccounts],
+      accounts: codexAccounts,
       proxies: proxyPool.getAllMasked(),
     });
   });
@@ -303,7 +290,6 @@ export function createProxyRoutes(
     const emailMap = new Map([
       ...accountPool.getAccounts().map((a) => [`codex:${a.id}`, a.email] as const),
       ...accountPool.getAccounts().map((a) => [a.id, a.email] as const),
-      ...(geminiPool?.getMaskedAccounts() ?? []).map((a) => [`gemini:${a.id}`, a.email] as const),
     ]);
 
     const exported = allAssignments
@@ -331,8 +317,6 @@ export function createProxyRoutes(
       ...accountPool.getAccounts()
         .filter((a): a is typeof a & { email: string } => a.email !== null)
         .map((a) => [a.email, { namespacedId: `codex:${a.id}` }] as const),
-      ...(geminiPool?.getMaskedAccounts() ?? [])
-        .map((a) => [a.email, { namespacedId: `gemini:${a.id}` }] as const),
     ]);
 
     const changes: Array<{

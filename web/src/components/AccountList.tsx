@@ -4,6 +4,7 @@ import { AccountCard } from "./AccountCard";
 import { AccountOverviewListItem } from "./AccountOverviewListItem";
 import { AccountImportExport } from "./AccountImportExport";
 import { useCodexCliAuth } from "../../../shared/hooks/use-codex-cli-auth";
+import { useAntigravityCliAuth } from "../../../shared/hooks/use-antigravity-cli-auth";
 import type { Account, ProxyEntry, QuotaWarning } from "../../../shared/types";
 import { derivedStatus } from "../lib/accountStatus";
 
@@ -44,6 +45,7 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
   const { lang } = useI18n();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const cliAuth = useCodexCliAuth(apiKey ?? null);
+  const antigravityCliAuth = useAntigravityCliAuth(apiKey ?? null);
   const [cliMessage, setCliMessage] = useState<{ text: string; error?: boolean } | null>(null);
   const [warnings, setWarnings] = useState<QuotaWarning[]>([]);
   const [visibleCount, setVisibleCount] = useState(() => {
@@ -79,6 +81,20 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
     setTimeout(() => setCliMessage(null), 5000);
     return null;
   }, [cliAuth, t]);
+
+  const handleApplyToAntigravityCli = useCallback(async (id: string) => {
+    const path = antigravityCliAuth.status?.path ?? "~/.gemini/antigravity-cli/antigravity-oauth-token";
+    if (!confirm(t("applyToAntigravityCliConfirm").replace("{path}", path))) return null;
+    const err = await antigravityCliAuth.apply(id);
+    if (err) {
+      setCliMessage({ text: t("applyToAntigravityCliFailed").replace("{error}", err), error: true });
+      setTimeout(() => setCliMessage(null), 6000);
+      return err;
+    }
+    setCliMessage({ text: t("applyToAntigravityCliSuccess") });
+    setTimeout(() => setCliMessage(null), 5000);
+    return null;
+  }, [antigravityCliAuth, t]);
 
   const runRefreshExpired = useCallback(async () => {
     const expiredIds = accounts.filter((a) => a.status === "expired").map((a) => a.id);
@@ -480,6 +496,8 @@ export function AccountList({ accounts, loading, onDelete, onRefresh, refreshing
                   onUpdateLabel={onUpdateLabel}
                   onApplyToCli={handleApplyToCli}
                   cliInUse={cliAuth.status?.matchedEntryId === acct.id}
+                  onApplyToAntigravityCli={handleApplyToAntigravityCli}
+                  antigravityCliInUse={antigravityCliAuth.status?.matchedEntryId === acct.id}
                 />
               ))}
             </>

@@ -64,7 +64,7 @@ export function buildInstructions(
 }
 
 /**
- * Map a token budget (e.g. Anthropic thinking.budget_tokens or Gemini thinkingBudget)
+ * Map a token budget (e.g. Anthropic thinking.budget_tokens)
  * to a Codex reasoning effort level.
  */
 export function budgetToEffort(budget: number | undefined): string | undefined {

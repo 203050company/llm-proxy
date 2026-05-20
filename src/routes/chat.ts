@@ -150,7 +150,7 @@ export function createChatRoutes(
       }),
     });
 
-    if (routeMatch.kind === "api-key" || routeMatch.kind === "adapter" || routeMatch.kind === "gemini-oauth") {
+    if (routeMatch.kind === "api-key" || routeMatch.kind === "adapter") {
       const directReq = {
         ...proxyReq,
         model: req.model,

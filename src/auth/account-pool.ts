@@ -206,10 +206,51 @@ export class AccountPool {
       // Status transitions to expired/banned/disabled make the account
       // unusable; reusing a pooled WS would just hit the same wall on the
       // upstream side. Evict so the pool doesn't hold a doomed connection.
-      if (status !== "active") this.evictWsPool(entryId);
+      if (status !== "active") {
+        this.evictWsPool(entryId);
+        void this.maybeRotateAntigravityCli(entryId);
+      }
     }
     if (status === "expired" && this._onExpired) {
       this._onExpired(entryId);
+    }
+  }
+
+  /**
+   * Check if the disabled/exhausted account is currently active in Antigravity CLI,
+   * and swap it to another available active account if so.
+   */
+  private async maybeRotateAntigravityCli(failedEntryId: string): Promise<void> {
+    try {
+      const { AntigravityCliAuthService } = await import("../services/antigravity-cli-auth.js");
+      const cliService = new AntigravityCliAuthService(this);
+      const status = cliService.getStatus();
+      
+      if (status.exists && status.matchedEntryId === failedEntryId) {
+        // Current CLI account just failed/exhausted! Let's find a replacement.
+        const availableEntries = this.getAllEntries().filter(
+          (entry) =>
+            entry.id !== failedEntryId &&
+            entry.status === "active" &&
+            entry.refreshToken &&
+            entry.accountId
+        );
+
+        if (availableEntries.length > 0) {
+          // Select the first available candidate
+          const replacement = availableEntries[0]!;
+          cliService.applyFromEntry(replacement.id);
+          console.log(
+            `[Antigravity CLI] Automatically rotated from exhausted account (${failedEntryId}) to active account (${replacement.id})`
+          );
+        } else {
+          console.warn(
+            `[Antigravity CLI] Active account (${failedEntryId}) was exhausted, but no other active proxy accounts are available for replacement.`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("[Antigravity CLI] Failed during automatic rotation check:", err);
     }
   }
 

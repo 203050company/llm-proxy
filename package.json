@@ -8,7 +8,6 @@
   ],
   "bin": {
     "cc-codex": "bin/cc-codex",
-    "cc-gemini": "bin/cc-gemini",
     "cc-opencode": "bin/cc-opencode"
   },
   "scripts": {

@@ -22,7 +22,6 @@ import { getConfig } from "../config.js";
 import { getDataDir } from "../paths.js";
 import type { AccountPool } from "./account-pool.js";
 import type { ApiKeyPool } from "./api-key-pool.js";
-import type { GeminiAccountPool } from "./gemini-account-pool.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -207,10 +206,9 @@ export class UsageStatsStore {
   recoverBaseline(
     pool: AccountPool,
     apiKeyPool?: ApiKeyPool,
-    geminiPool?: GeminiAccountPool,
   ): void {
     if (!this._pendingRecovery) return;
-    const live = this.poolTotals(pool, apiKeyPool, geminiPool);
+    const live = this.poolTotals(pool, apiKeyPool);
     this.baseline = {
       input_tokens: Math.max(0, this._pendingRecovery.input_tokens - live.input_tokens),
       output_tokens: Math.max(0, this._pendingRecovery.output_tokens - live.output_tokens),
@@ -264,7 +262,6 @@ export class UsageStatsStore {
   private poolTotals(
     pool: AccountPool,
     apiKeyPool?: ApiKeyPool,
-    geminiPool?: GeminiAccountPool,
   ): { input_tokens: number; output_tokens: number; cached_tokens: number; image_input_tokens: number; image_output_tokens: number; image_request_count: number; image_request_failed_count: number; request_count: number; active_accounts: number; total_accounts: number; models: Record<string, ModelUsage> } {
     const entries = pool.getAllEntries();
     let input_tokens = 0;
@@ -301,24 +298,6 @@ export class UsageStatsStore {
       addModelUsage(models, entry.model, entry.usage.input_tokens, entry.usage.output_tokens, entry.usage.request_count);
     }
 
-    for (const entry of geminiPool?.getAll() ?? []) {
-      input_tokens += entry.usage.input_tokens;
-      output_tokens += entry.usage.output_tokens;
-      request_count += entry.usage.request_count;
-      total_accounts++;
-      if (entry.status === "active") active_accounts++;
-      for (const [model, usage] of Object.entries(entry.usage.models)) {
-        addModelUsage(models, model, usage.input_tokens, usage.output_tokens, usage.request_count);
-      }
-    }
-
-    input_tokens += this.externalUsage.input_tokens;
-    output_tokens += this.externalUsage.output_tokens;
-    request_count += this.externalUsage.request_count;
-    for (const [model, usage] of Object.entries(this.externalUsage.models ?? {})) {
-      addModelUsage(models, model, usage.input_tokens, usage.output_tokens, usage.request_count);
-    }
-
     return { input_tokens, output_tokens, cached_tokens, image_input_tokens, image_output_tokens, image_request_count, image_request_failed_count, request_count, active_accounts, total_accounts, models };
   }
 
@@ -326,9 +305,8 @@ export class UsageStatsStore {
   recordSnapshot(
     pool: AccountPool,
     apiKeyPool?: ApiKeyPool,
-    geminiPool?: GeminiAccountPool,
   ): void {
-    const live = this.poolTotals(pool, apiKeyPool, geminiPool);
+    const live = this.poolTotals(pool, apiKeyPool);
     const now = new Date().toISOString();
 
     // Detect pool reset: if live totals dropped below previous snapshot,
@@ -408,9 +386,8 @@ export class UsageStatsStore {
   getSummary(
     pool: AccountPool,
     apiKeyPool?: ApiKeyPool,
-    geminiPool?: GeminiAccountPool,
   ): UsageSummary {
-    const live = this.poolTotals(pool, apiKeyPool, geminiPool);
+    const live = this.poolTotals(pool, apiKeyPool);
 
     return {
       total_input_tokens: this.baseline.input_tokens + live.input_tokens,

@@ -2,7 +2,6 @@ import type { Context, Next } from "hono";
 import type { StatusCode } from "hono/utils/http-status";
 import type { OpenAIErrorBody } from "../types/openai.js";
 import type { AnthropicErrorBody, AnthropicErrorType } from "../types/anthropic.js";
-import { GEMINI_STATUS_MAP } from "../types/gemini.js";
 
 function makeOpenAIError(
   message: string,
@@ -24,18 +23,6 @@ function makeAnthropicError(
   errorType: AnthropicErrorType,
 ): AnthropicErrorBody {
   return { type: "error", error: { type: errorType, message } };
-}
-
-interface GeminiErrorBody {
-  error: { code: number; message: string; status: string };
-}
-
-function makeGeminiError(
-  code: number,
-  message: string,
-  status: string,
-): GeminiErrorBody {
-  return { error: { code, message, status } };
 }
 
 export async function errorHandler(c: Context, next: Next): Promise<void> {
@@ -88,14 +75,6 @@ export async function errorHandler(c: Context, next: Next): Promise<void> {
       }
       c.status(500);
       return c.json(makeAnthropicError(message, "api_error")) as never;
-    }
-
-    // Gemini API errors
-    if (path.startsWith("/v1beta/")) {
-      const code = status ?? 500;
-      const geminiStatus = GEMINI_STATUS_MAP[code] ?? "INTERNAL";
-      c.status((code >= 400 && code < 600 ? code : 500) as StatusCode);
-      return c.json(makeGeminiError(code, message, geminiStatus)) as never;
     }
 
     // Default: OpenAI-format errors

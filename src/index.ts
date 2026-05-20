@@ -5,11 +5,8 @@ import { serve } from "@hono/node-server";
 import { loadConfig, loadFingerprint, getConfig, hasLocalOverride } from "./config.js";
 import { initContext } from "./context.js";
 import { AccountPool } from "./auth/account-pool.js";
-import { GeminiAccountPool } from "./auth/gemini-account-pool.js";
-import { GeminiTokenManager } from "./auth/gemini-token-manager.js";
 import { RefreshScheduler } from "./auth/refresh-scheduler.js";
 import { AccountLogStore } from "./services/account-log-store.js";
-import { GeminiQuotaRefreshService } from "./services/gemini-code-assist-quota.js";
 
 import { requestId } from "./middleware/request-id.js";
 import { logger } from "./middleware/logger.js";
@@ -20,13 +17,12 @@ import { cors } from "./middleware/cors.js";
 
 import type { UpstreamAdapter } from "./proxy/upstream-adapter.js";
 import { createAuthRoutes } from "./routes/auth.js";
-import { createGeminiAuthRoutes } from "./routes/gemini-auth.js";
 import { createAccountRoutes } from "./routes/accounts.js";
 import { createChatRoutes } from "./routes/chat.js";
 import { createMessagesRoutes } from "./routes/messages.js";
-import { createGeminiRoutes } from "./routes/gemini.js";
 import { createModelRoutes } from "./routes/models.js";
 import { createWebRoutes } from "./routes/web.js";
+import { createAntigravityCliAuthRoutes } from "./routes/admin/antigravity-cli-auth.js";
 import { CookieJar } from "./proxy/cookie-jar.js";
 import { ProxyPool } from "./proxy/proxy-pool.js";
 import { setWsPoolConfig, getWsPool } from "./proxy/ws-pool.js";
@@ -46,8 +42,6 @@ import { createDashboardAuthRoutes } from "./routes/dashboard-login.js";
 import { UpstreamRouter } from "./proxy/upstream-router.js";
 import { OpenAIUpstream } from "./proxy/openai-upstream.js";
 import { AnthropicUpstream } from "./proxy/anthropic-upstream.js";
-import { GeminiUpstream } from "./proxy/gemini-upstream.js";
-import { GeminiCodeAssistUpstream } from "./proxy/gemini-code-assist-upstream.js";
 import { OpencodeGoUpstream, resolveOpencodeGoAuth } from "./proxy/opencode-go-upstream.js";
 import { ApiKeyPool } from "./auth/api-key-pool.js";
 import { createApiKeyRoutes } from "./routes/api-keys.js";
@@ -103,9 +97,6 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
 
   // Initialize managers
   const accountPool = new AccountPool();
-  const geminiAccountPool = new GeminiAccountPool();
-  const geminiTokenManager = new GeminiTokenManager(geminiAccountPool);
-  const geminiQuotaRefresh = new GeminiQuotaRefreshService(geminiAccountPool, geminiTokenManager);
   const accountLogStore = new AccountLogStore();
   const refreshScheduler = new RefreshScheduler(accountPool, { accountLogStore });
   const cookieJar = new CookieJar();
@@ -155,10 +146,6 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
     adapters.set("anthropic", new AnthropicUpstream(cfg.providers.anthropic.api_key));
     console.log("[Init] Anthropic upstream configured");
   }
-  if (cfg.providers.gemini) {
-    adapters.set("gemini", new GeminiUpstream(cfg.providers.gemini.api_key));
-    console.log("[Init] Gemini upstream configured");
-  }
   const opencodeGoAuth = resolveOpencodeGoAuth();
   if (opencodeGoAuth.apiKey) {
     adapters.set("opencode-go", new OpencodeGoUpstream(opencodeGoAuth.apiKey));
@@ -176,93 +163,42 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   // Initialize API key pool for runtime-managed third-party keys
   const apiKeyPool = new ApiKeyPool();
   const hasApiKeys = apiKeyPool.getAll().length > 0;
-  const geminiOAuthEnabled = cfg.gemini.oauth_enabled !== false;
 
-  const upstreamRouter = (adapters.size > 0 || hasApiKeys || geminiOAuthEnabled)
-    ? new UpstreamRouter(adapters, cfg.model_routing, "codex", {
-      geminiPriority: cfg.gemini.api_key_priority,
-    })
+  const upstreamRouter = (adapters.size > 0 || hasApiKeys)
+    ? new UpstreamRouter(adapters, cfg.model_routing, "codex")
     : undefined;
 
   // Attach API key pool to router for dynamic model resolution
   if (upstreamRouter) {
     upstreamRouter.setApiKeyPool(apiKeyPool, createAdapterForEntry);
     if (hasApiKeys) console.log(`[Init] API key pool: ${apiKeyPool.getAll().length} key(s) loaded`);
-    if (geminiOAuthEnabled) {
-      upstreamRouter.setGeminiOAuth(geminiAccountPool, (model) => {
-        const account = geminiAccountPool.pickAccountForModel(model);
-        if (!account) return null;
-        return {
-          accountId: account.id,
-          adapter: new GeminiCodeAssistUpstream({
-            account,
-            endpoint: cfg.gemini.code_assist_endpoint,
-            apiVersion: cfg.gemini.code_assist_api_version,
-            rateLimitBackoffMs: cfg.auth.rate_limit_backoff_seconds * 1000,
-            ensureFreshAccount: (accountId) => geminiTokenManager.ensureFreshAccount(accountId),
-            pickFallbackAccount: (fallbackModel, attemptedAccountIds) =>
-              geminiAccountPool.pickAccountForModel(fallbackModel, attemptedAccountIds),
-            onAttempt: (event) => {
-              console.info(
-                `[GeminiDirect] account=${event.accountId} model=${event.model} status=${event.status} outcome=${event.outcome} durationMs=${event.durationMs}`,
-              );
-            },
-            onRequestFailure: async (event) => {
-              console.warn(
-                `[GeminiDirect] failure account=${event.accountId} model=${event.model} status=${event.status}`,
-              );
-              await geminiQuotaRefresh.refreshAfterFailure(event.accountId);
-            },
-            onRateLimit: (event) => {
-              const until = new Date(Date.now() + event.retryAfterMs).toISOString();
-              geminiAccountPool.markModelRateLimited(event.accountId, event.model, {
-                until,
-                reason: summarizeLogBody(event.body),
-                lastStatus: event.status,
-              });
-              console.warn(
-                `[GeminiDirect] rate_limited account=${event.accountId} model=${event.model} status=${event.status} retryAfterMs=${event.retryAfterMs} until=${until}`,
-              );
-            },
-            onUsage: (accountId, usedModel, usage) => {
-              console.info(
-                `[GeminiDirect] usage account=${accountId} model=${usedModel} input_tokens=${usage.input_tokens} output_tokens=${usage.output_tokens}`,
-              );
-              geminiAccountPool.recordUsage(accountId, usedModel, usage);
-            },
-          }),
-        };
-      });
-    }
   }
 
   // Mount routes
   const authRoutes = createAuthRoutes(accountPool, refreshScheduler);
-  const geminiAuthRoutes = createGeminiAuthRoutes(geminiAccountPool, geminiTokenManager);
   const accountRoutes = createAccountRoutes(accountPool, refreshScheduler, cookieJar, proxyPool, accountLogStore);
   const chatRoutes = createChatRoutes(accountPool, cookieJar, proxyPool, upstreamRouter, apiKeyPool);
   const messagesRoutes = createMessagesRoutes(accountPool, cookieJar, proxyPool, upstreamRouter, apiKeyPool);
-  const geminiRoutes = createGeminiRoutes(accountPool, cookieJar, proxyPool, upstreamRouter, apiKeyPool);
   const responsesRoutes = createResponsesRoutes(accountPool, cookieJar, proxyPool, upstreamRouter, apiKeyPool);
   const apiKeyRoutes = createApiKeyRoutes(apiKeyPool);
-  const proxyRoutes = createProxyRoutes(proxyPool, accountPool, geminiAccountPool);
+
+  const proxyRoutes = createProxyRoutes(proxyPool, accountPool);
   const usageStats = new UsageStatsStore();
-  usageStats.recoverBaseline(accountPool, apiKeyPool, geminiAccountPool);
-  const webRoutes = createWebRoutes(accountPool, usageStats, proxyPool, apiKeyPool, geminiAccountPool);
+  usageStats.recoverBaseline(accountPool, apiKeyPool);
+  const webRoutes = createWebRoutes(accountPool, usageStats, proxyPool, apiKeyPool);
 
   app.route("/", createDashboardAuthRoutes());
   app.route("/", authRoutes);
-  app.route("/", geminiAuthRoutes);
   app.route("/", accountRoutes);
   app.route("/", apiKeyRoutes);
   app.route("/", chatRoutes);
   app.route("/", messagesRoutes);
-  app.route("/", geminiRoutes);
   app.route("/", responsesRoutes);
   app.route("/", createOfficialAgentRoutes());
   app.route("/", proxyRoutes);
   app.route("/", createModelRoutes(apiKeyPool));
   app.route("/", webRoutes);
+  app.route("/", createAntigravityCliAuthRoutes(accountPool));
 
   // Start server
   // User's explicit local.yaml host wins over programmatic options (e.g. Electron's 127.0.0.1 default)
@@ -309,7 +245,7 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   startModelRefresh(accountPool, cookieJar, proxyPool);
 
   // Start usage stats snapshot timer (no upstream requests — quota is collected passively)
-  startQuotaRefresh(accountPool, usageStats, apiKeyPool, geminiAccountPool);
+  startQuotaRefresh(accountPool, usageStats, apiKeyPool);
 
   // Start proxy health check timer (if proxies exist)
   proxyPool.startHealthCheckTimer();
@@ -357,11 +293,6 @@ export async function startServer(options?: StartOptions): Promise<ServerHandle>
   return { close, port: actualPort };
 }
 
-function summarizeLogBody(body: string): string | null {
-  const compact = body.replace(/\s+/g, " ").trim();
-  if (!compact) return null;
-  return compact.length > 240 ? compact.slice(0, 240) + "..." : compact;
-}
 
 // ── CLI entry point ──────────────────────────────────────────────────
 

@@ -9,7 +9,7 @@ import { z } from "zod";
 import type { ApiKeyEntry, ApiKeyPool } from "../auth/api-key-pool.js";
 import { PROVIDER_CATALOG } from "../auth/api-key-catalog.js";
 
-const VALID_PROVIDERS = ["anthropic", "openai", "gemini", "openrouter", "custom"] as const;
+const VALID_PROVIDERS = ["anthropic", "openai", "openrouter", "custom"] as const;
 const ModelsSchema = z.array(z.string().trim().min(1)).min(1).transform((models) => [...new Set(models)]);
 
 const ApiKeyBindingSchema = z.object({

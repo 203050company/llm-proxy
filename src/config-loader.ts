@@ -89,18 +89,6 @@ export function applyEnvOverrides(
       (raw.server as Record<string, unknown>).port = parsed;
     }
   }
-  const geminiOAuthClientIdEnv = process.env.GEMINI_OAUTH_CLIENT_ID?.trim();
-  const geminiOAuthClientSecretEnv = process.env.GEMINI_OAUTH_CLIENT_SECRET?.trim();
-  if (geminiOAuthClientIdEnv || geminiOAuthClientSecretEnv) {
-    if (!raw.gemini) raw.gemini = {};
-    const gemini = raw.gemini as Record<string, unknown>;
-    if (geminiOAuthClientIdEnv) {
-      gemini.oauth_client_id = geminiOAuthClientIdEnv;
-    }
-    if (geminiOAuthClientSecretEnv) {
-      gemini.oauth_client_secret = geminiOAuthClientSecretEnv;
-    }
-  }
   const ollamaEnabledEnv = process.env.OLLAMA_BRIDGE_ENABLED?.trim().toLowerCase();
   const ollamaHostEnv = process.env.OLLAMA_BRIDGE_HOST?.trim();
   const ollamaPortEnv = process.env.OLLAMA_BRIDGE_PORT?.trim();

@@ -8,6 +8,7 @@ import type { AccountEntry } from "../auth/types.js";
 import { toQuota } from "../auth/quota-utils.js";
 import { CodexApi } from "../proxy/codex-api.js";
 import type { ProxyPool } from "../proxy/proxy-pool.js";
+import { rateLimitToQuota } from "../proxy/rate-limit-headers.js";
 
 export interface AccountSessionWarmupResult {
   id: string;
@@ -106,25 +107,49 @@ async function warmupEligibleEntry(
   const startedAt = Date.now();
 
   try {
-    const usage = await api.warmup();
-    if (!usage) {
-      return {
-        id: entry.id,
-        email: entry.email,
-        previousStatus,
-        result: "failed",
-        durationMs: Date.now() - startedAt,
-        error: "warmup returned no quota",
-      };
+    const rateLimit = await api.warmupSession();
+    let quota;
+
+    if (!rateLimit) {
+      // Fallback: Attempt to fetch usage/quota directly via api.warmup()
+      const usageResponse = await api.warmup();
+      if (!usageResponse) {
+        return {
+          id: entry.id,
+          email: entry.email,
+          previousStatus,
+          result: "failed",
+          durationMs: Date.now() - startedAt,
+          error: "session warmup returned no rate-limit data and fallback failed",
+        };
+      }
+      quota = toQuota(usageResponse);
+    } else {
+      quota = rateLimitToQuota(rateLimit, (entry as any).planType ?? null);
     }
 
-    const quota = toQuota(usage);
     pool.updateCachedQuota(entry.id, quota);
     pool.syncRateLimitWindow(
       entry.id,
       quota.rate_limit.reset_at,
       quota.rate_limit.limit_window_seconds,
     );
+
+    const isLimitReached =
+      quota.rate_limit?.limit_reached === true ||
+      quota.secondary_rate_limit?.limit_reached === true ||
+      quota.code_review_rate_limit?.limit_reached === true;
+
+    if (isLimitReached) {
+      return {
+        id: entry.id,
+        email: entry.email,
+        previousStatus,
+        result: "failed",
+        durationMs: Date.now() - startedAt,
+        error: "rate limit reached (사용량초과)",
+      };
+    }
 
     return {
       id: entry.id,

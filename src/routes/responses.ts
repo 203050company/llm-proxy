@@ -622,7 +622,7 @@ async function handleCompact(
   }
 
   const compactRouteMatch = upstreamRouter?.resolveMatch(rawModel);
-  if (compactRouteMatch?.kind === "api-key" || compactRouteMatch?.kind === "adapter" || compactRouteMatch?.kind === "gemini-oauth") {
+  if (compactRouteMatch?.kind === "api-key" || compactRouteMatch?.kind === "adapter") {
     const directReq = {
       codexRequest: {
         model: rawModel,
@@ -758,7 +758,7 @@ export function createResponsesRoutes(
     const allowUnauthenticated =
       routeMatch?.kind === "api-key" ||
       routeMatch?.kind === "adapter" ||
-      routeMatch?.kind === "gemini-oauth";
+      false;
     const authErr = checkAuth(c, accountPool, allowUnauthenticated);
     if (authErr) return authErr;
 
@@ -911,7 +911,7 @@ export function createResponsesRoutes(
       }),
     });
 
-    if (routeMatch?.kind === "api-key" || routeMatch?.kind === "adapter" || routeMatch?.kind === "gemini-oauth") {
+    if (routeMatch?.kind === "api-key" || routeMatch?.kind === "adapter") {
       // Use raw model name so adapter's extractModelId can strip the provider prefix
       const directReq = { ...proxyReq, model: rawModel, codexRequest: { ...codexRequest, model: rawModel } };
       const apiKeyEntryId = routeMatch.kind === "api-key" ? routeMatch.entry.id : undefined;
@@ -947,7 +947,7 @@ export function createResponsesRoutes(
     const allowUnauthenticated =
       routeMatch?.kind === "api-key" ||
       routeMatch?.kind === "adapter" ||
-      routeMatch?.kind === "gemini-oauth";
+      false;
     const authErr = checkAuth(c, accountPool, allowUnauthenticated);
     if (authErr) return authErr;
 

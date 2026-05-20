@@ -3,7 +3,7 @@ import { LogsSettings } from "./LogsSettings";
 import { OllamaBridgeSettings } from "./OllamaBridgeSettings";
 import { QuotaSettings } from "./QuotaSettings";
 import { RotationSettings } from "./RotationSettings";
-import { GeminiSettings } from "./GeminiSettings";
+import { AntigravitySettings } from "./AntigravitySettings";
 import { SettingsPanel } from "./SettingsPanel";
 import { ApiConfig } from "./ApiConfig";
 import { AnthropicSetup } from "./AnthropicSetup";
@@ -31,7 +31,7 @@ export function SettingsTab(props: SettingsTabProps) {
       <LogsSettings />
       <QuotaSettings />
       <RotationSettings />
-      <GeminiSettings />
+      <AntigravitySettings apiKey={props.apiKey} />
       <SettingsPanel />
       <ApiConfig
         baseUrl={props.baseUrl}

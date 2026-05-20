@@ -83,33 +83,6 @@ export const ConfigSchema = z.object({
     oauth_auth_endpoint: z.string().default("https://auth.openai.com/oauth/authorize"),
     oauth_token_endpoint: z.string().default("https://auth.openai.com/oauth/token"),
   }),
-  gemini: z.object({
-    oauth_enabled: z.boolean().default(true),
-    oauth_client_id: z.string().default(""),
-    oauth_client_secret: z.string().nullable().default(null),
-    oauth_auth_endpoint: z.string().default("https://accounts.google.com/o/oauth2/v2/auth"),
-    oauth_token_endpoint: z.string().default("https://oauth2.googleapis.com/token"),
-    oauth_userinfo_endpoint: z.string().default("https://www.googleapis.com/oauth2/v2/userinfo"),
-    oauth_callback_host: z.string().default("127.0.0.1"),
-    oauth_callback_path: z.string().default("/oauth2callback"),
-    credentials_path: z.string().default("~/.gemini/oauth_creds.json"),
-    code_assist_endpoint: z.string().default("https://cloudcode-pa.googleapis.com"),
-    code_assist_api_version: z.string().default("v1internal"),
-    project_id: z.string().nullable().default(null),
-    refresh_enabled: z.boolean().default(true),
-    refresh_margin_seconds: z.number().min(0).default(300),
-    refresh_concurrency: z.number().int().min(1).default(2),
-    api_key_priority: z.enum(["api_key", "oauth"]).default("api_key"),
-    routing: z.object({
-      opus: z.string().default("gemini-3.1-pro"),
-      sonnet: z.string().default("gemini-3-pro"),
-      haiku: z.string().default("gemini-3.1-flash-lite"),
-      failover: z.record(z.array(z.string())).default({
-        "gemini-3.1-pro": ["gemini-3-pro", "gemini-3.1-flash-lite"],
-        "gemini-3-pro": ["gemini-3.1-flash-lite"],
-      }),
-    }).default({}),
-  }).default({}),
   server: z.object({
     host: z.string().default("0.0.0.0"),
     port: z.number().min(1).max(65535).default(8080),
@@ -194,9 +167,6 @@ export const ConfigSchema = z.object({
       base_url: z.string().default("https://api.openai.com/v1"),
     }).optional(),
     anthropic: z.object({
-      api_key: z.string(),
-    }).optional(),
-    gemini: z.object({
       api_key: z.string(),
     }).optional(),
     /** OpenAI-compatible third-party providers (Groq, DeepSeek, Together, etc.). */

@@ -49,6 +49,8 @@ interface AccountOverviewListItemProps {
   onUpdateLabel?: (id: string, label: string | null) => Promise<string | null>;
   onApplyToCli?: (id: string) => Promise<string | null>;
   cliInUse?: boolean;
+  onApplyToAntigravityCli?: (id: string) => Promise<string | null>;
+  antigravityCliInUse?: boolean;
 }
 
 function formatShortResetTime(unixSec: number): string {
@@ -118,7 +120,7 @@ function UsageSummary({ labelKey, section }: { labelKey: "current5hUsage" | "wee
   );
 }
 
-export function AccountOverviewListItem({ account, onDelete, proxies, onProxyChange, selected, onToggleSelect, onRefreshQuota, onToggleStatus, onUpdateLabel, onApplyToCli, cliInUse }: AccountOverviewListItemProps) {
+export function AccountOverviewListItem({ account, onDelete, proxies, onProxyChange, selected, onToggleSelect, onRefreshQuota, onToggleStatus, onUpdateLabel, onApplyToCli, cliInUse, onApplyToAntigravityCli, antigravityCliInUse }: AccountOverviewListItemProps) {
   const t = useT();
   const email = account.email || "Unknown";
   const plan = account.planType || t("freeTier");
@@ -129,6 +131,7 @@ export function AccountOverviewListItem({ account, onDelete, proxies, onProxyCha
   const [quotaRefreshing, setQuotaRefreshing] = useState(false);
   const [statusToggling, setStatusToggling] = useState(false);
   const [applyingCli, setApplyingCli] = useState(false);
+  const [applyingAntigravityCli, setApplyingAntigravityCli] = useState(false);
   const [logsOpen, setLogsOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(account.label || email);
@@ -176,6 +179,16 @@ export function AccountOverviewListItem({ account, onDelete, proxies, onProxyCha
       setApplyingCli(false);
     }
   }, [account.id, onApplyToCli]);
+
+  const handleApplyToAntigravityCli = useCallback(async () => {
+    if (!onApplyToAntigravityCli) return;
+    setApplyingAntigravityCli(true);
+    try {
+      await onApplyToAntigravityCli(account.id);
+    } finally {
+      setApplyingAntigravityCli(false);
+    }
+  }, [account.id, onApplyToAntigravityCli]);
 
   const handleLabelEdit = useCallback(() => {
     setLabelDraft(account.label || email);
@@ -304,6 +317,22 @@ export function AccountOverviewListItem({ account, onDelete, proxies, onProxyCha
               >
                 <svg class="size-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9-9h13.5a1.5 1.5 0 011.5 1.5v12a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5v-12a1.5 1.5 0 011.5-1.5z" />
+                </svg>
+              </button>
+            )}
+            {onApplyToAntigravityCli && (
+              <button
+                onClick={handleApplyToAntigravityCli}
+                disabled={applyingAntigravityCli}
+                class={`p-1.5 transition-colors rounded-md disabled:opacity-40 ${
+                  antigravityCliInUse
+                    ? "text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                    : "text-slate-400 dark:text-text-dim hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20"
+                }`}
+                title={antigravityCliInUse ? t("applyToAntigravityCliBadge") : t("applyToAntigravityCli")}
+              >
+                <svg class="size-[16px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 8.41a6 6 0 00-5.84 7.38h11.8M9.63 8.41a14.93 14.93 0 016.16-4.57 14.93 14.93 0 011.66 8.35m-7.82-3.78l3.18 3.18" />
                 </svg>
               </button>
             )}

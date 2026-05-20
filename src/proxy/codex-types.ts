@@ -8,7 +8,7 @@ export interface CodexResponsesRequest {
   instructions?: string | null;
   input: CodexInputItem[];
   stream: true;
-  store: false;
+  store: boolean;
   /** Optional: reasoning effort + summary mode */
   reasoning?: { effort?: string; summary?: string };
   /** Optional: service tier ("fast" / "flex") */

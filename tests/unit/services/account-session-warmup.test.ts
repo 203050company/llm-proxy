@@ -13,6 +13,7 @@ const constructorCalls: Array<{
 }> = [];
 
 const warmupQueue: Array<unknown> = [];
+const warmupFallbackQueue: Array<unknown> = [];
 const warmupStartTimes: number[] = [];
 
 vi.mock("@src/proxy/codex-api.js", () => ({
@@ -28,6 +29,12 @@ vi.mock("@src/proxy/codex-api.js", () => ({
     }
 
     async warmup(): Promise<unknown> {
+      const next = warmupFallbackQueue.shift();
+      if (next instanceof Error) throw next;
+      return next ?? null;
+    }
+
+    async warmupSession(): Promise<unknown> {
       warmupStartTimes.push(Date.now());
       const next = warmupQueue.shift();
       if (next instanceof Error) throw next;
@@ -36,7 +43,22 @@ vi.mock("@src/proxy/codex-api.js", () => ({
   },
 }));
 
-function makeUsageResponse(overrides?: {
+function makeParsedRateLimit(overrides?: {
+  usedPercent?: number;
+  resetAt?: number;
+  limitWindowSeconds?: number;
+}) {
+  return {
+    primary: {
+      used_percent: overrides?.usedPercent ?? 24,
+      window_minutes: overrides?.limitWindowSeconds ? overrides.limitWindowSeconds / 60 : 60,
+      reset_at: overrides?.resetAt ?? 1712345678,
+    },
+    secondary: null,
+  };
+}
+
+function makeCodexUsageResponse(overrides?: {
   usedPercent?: number;
   resetAt?: number;
   limitWindowSeconds?: number;
@@ -44,19 +66,11 @@ function makeUsageResponse(overrides?: {
   return {
     plan_type: "team",
     rate_limit: {
-      allowed: true,
-      limit_reached: false,
-      primary_window: {
-        used_percent: overrides?.usedPercent ?? 24,
-        limit_window_seconds: overrides?.limitWindowSeconds ?? 3600,
-        reset_after_seconds: 120,
-        reset_at: overrides?.resetAt ?? 1712345678,
-      },
-      secondary_window: null,
+      used_percent: overrides?.usedPercent ?? 24,
+      limit_window_seconds: overrides?.limitWindowSeconds ?? 7200,
+      reset_at: overrides?.resetAt ?? 1711111111,
+      resets_at: overrides?.resetAt ?? 1711111111,
     },
-    code_review_rate_limit: null,
-    credits: null,
-    promo: null,
   };
 }
 
@@ -66,6 +80,7 @@ function makeEntry(overrides?: Partial<{
   accountId: string | null;
   email: string | null;
   status: string;
+  planType: string | null;
 }>) {
   return {
     id: overrides?.id ?? "acc-1",
@@ -73,6 +88,7 @@ function makeEntry(overrides?: Partial<{
     accountId: overrides?.accountId ?? "account-1",
     email: overrides?.email ?? "test@example.com",
     status: overrides?.status ?? "active",
+    planType: overrides?.planType ?? "team",
   };
 }
 
@@ -104,13 +120,14 @@ describe("batchWarmupSessions", () => {
   beforeEach(() => {
     constructorCalls.length = 0;
     warmupQueue.length = 0;
+    warmupFallbackQueue.length = 0;
     warmupStartTimes.length = 0;
     vi.useRealTimers();
     vi.clearAllMocks();
   });
 
   it("returns warmed results and syncs quota data", async () => {
-    warmupQueue.push(makeUsageResponse({ resetAt: 1711111111, limitWindowSeconds: 7200 }));
+    warmupQueue.push(makeParsedRateLimit({ resetAt: 1711111111, limitWindowSeconds: 7200 }));
     const pool = makePool([makeEntry()]);
     const proxyPool = makeProxyPool("http://proxy.local:9000");
 
@@ -191,7 +208,7 @@ describe("batchWarmupSessions", () => {
   });
 
   it("filters warmup targets by ids", async () => {
-    warmupQueue.push(makeUsageResponse());
+    warmupQueue.push(makeParsedRateLimit());
     const pool = makePool([
       makeEntry({ id: "acc-1" }),
       makeEntry({ id: "acc-2", token: "token-2", accountId: "account-2" }),
@@ -224,9 +241,9 @@ describe("batchWarmupSessions", () => {
     vi.useFakeTimers();
     vi.setSystemTime(0);
 
-    const first = createDeferred<ReturnType<typeof makeUsageResponse>>();
-    const second = createDeferred<ReturnType<typeof makeUsageResponse>>();
-    const third = createDeferred<ReturnType<typeof makeUsageResponse>>();
+    const first = createDeferred<ReturnType<typeof makeParsedRateLimit>>();
+    const second = createDeferred<ReturnType<typeof makeParsedRateLimit>>();
+    const third = createDeferred<ReturnType<typeof makeParsedRateLimit>>();
     warmupQueue.push(first.promise, second.promise, third.promise);
 
     const pool = makePool([
@@ -250,7 +267,7 @@ describe("batchWarmupSessions", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(warmupStartTimes).toEqual([0, 100]);
 
-    first.resolve(makeUsageResponse({ resetAt: 1711111111 }));
+    first.resolve(makeParsedRateLimit({ resetAt: 1711111111 }));
     await vi.advanceTimersByTimeAsync(0);
     expect(warmupStartTimes).toEqual([0, 100]);
 
@@ -260,16 +277,17 @@ describe("batchWarmupSessions", () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(warmupStartTimes).toEqual([0, 100, 200]);
 
-    second.resolve(makeUsageResponse({ resetAt: 1711111112 }));
-    third.resolve(makeUsageResponse({ resetAt: 1711111113 }));
+    second.resolve(makeParsedRateLimit({ resetAt: 1711111112 }));
+    third.resolve(makeParsedRateLimit({ resetAt: 1711111113 }));
     await vi.runAllTimersAsync();
 
     const results = await warmupPromise;
     expect(results.map((result) => result.result)).toEqual(["warmed", "warmed", "warmed"]);
   });
 
-  it("returns failed when warmup returns no quota", async () => {
+  it("returns failed when warmup returns no quota and fallback fails", async () => {
     warmupQueue.push(null);
+    warmupFallbackQueue.push(null);
     const pool = makePool([makeEntry()]);
 
     const { batchWarmupSessions } = await import("@src/services/account-session-warmup.js");
@@ -282,12 +300,45 @@ describe("batchWarmupSessions", () => {
         result: "failed",
         previousStatus: "active",
         durationMs: expect.any(Number),
-        error: "warmup returned no quota",
+        error: "session warmup returned no rate-limit data and fallback failed",
       }),
     ]);
     expect(results[0].durationMs).toBeGreaterThanOrEqual(0);
     expect(pool.updateCachedQuota).not.toHaveBeenCalled();
     expect(pool.syncRateLimitWindow).not.toHaveBeenCalled();
+  });
+
+  it("falls back to warmup API when warmupSession returns no quota", async () => {
+    warmupQueue.push(null);
+    warmupFallbackQueue.push(makeCodexUsageResponse({ resetAt: 1711111111, limitWindowSeconds: 7200 }));
+    const pool = makePool([makeEntry()]);
+
+    const { batchWarmupSessions } = await import("@src/services/account-session-warmup.js");
+    const results = await batchWarmupSessions(pool as never, { staggerMs: 0 });
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "acc-1",
+        email: "test@example.com",
+        result: "warmed",
+        previousStatus: "active",
+        durationMs: expect.any(Number),
+      }),
+    ]);
+    expect(results[0].durationMs).toBeGreaterThanOrEqual(0);
+    expect(pool.updateCachedQuota).toHaveBeenCalledWith("acc-1", {
+      plan_type: "team",
+      rate_limit: {
+        allowed: true,
+        limit_reached: false,
+        used_percent: 24,
+        reset_at: 1711111111,
+        limit_window_seconds: 7200,
+      },
+      secondary_rate_limit: null,
+      code_review_rate_limit: null,
+    });
+    expect(pool.syncRateLimitWindow).toHaveBeenCalledWith("acc-1", 1711111111, 7200);
   });
 
   it("returns failed when warmup throws", async () => {
@@ -310,5 +361,52 @@ describe("batchWarmupSessions", () => {
     expect(results[0].durationMs).toBeGreaterThanOrEqual(0);
     expect(pool.updateCachedQuota).not.toHaveBeenCalled();
     expect(pool.syncRateLimitWindow).not.toHaveBeenCalled();
+  });
+
+  it("returns failed when warmupSession quota has limit_reached set to true", async () => {
+    warmupQueue.push(makeParsedRateLimit({ usedPercent: 100 }));
+    const pool = makePool([makeEntry()]);
+
+    const { batchWarmupSessions } = await import("@src/services/account-session-warmup.js");
+    const results = await batchWarmupSessions(pool as never, { staggerMs: 0 });
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "acc-1",
+        email: "test@example.com",
+        result: "failed",
+        previousStatus: "active",
+        durationMs: expect.any(Number),
+        error: "rate limit reached (사용량초과)",
+      }),
+    ]);
+    expect(results[0].durationMs).toBeGreaterThanOrEqual(0);
+    expect(pool.updateCachedQuota).toHaveBeenCalled();
+    expect(pool.syncRateLimitWindow).toHaveBeenCalled();
+  });
+
+  it("returns failed when fallback warmup quota has limit_reached set to true", async () => {
+    warmupQueue.push(null);
+    const usageResponse = makeCodexUsageResponse();
+    usageResponse.rate_limit.used_percent = 100;
+    warmupFallbackQueue.push(usageResponse);
+    const pool = makePool([makeEntry()]);
+
+    const { batchWarmupSessions } = await import("@src/services/account-session-warmup.js");
+    const results = await batchWarmupSessions(pool as never, { staggerMs: 0 });
+
+    expect(results).toEqual([
+      expect.objectContaining({
+        id: "acc-1",
+        email: "test@example.com",
+        result: "failed",
+        previousStatus: "active",
+        durationMs: expect.any(Number),
+        error: "rate limit reached (사용량초과)",
+      }),
+    ]);
+    expect(results[0].durationMs).toBeGreaterThanOrEqual(0);
+    expect(pool.updateCachedQuota).toHaveBeenCalled();
+    expect(pool.syncRateLimitWindow).toHaveBeenCalled();
   });
 });

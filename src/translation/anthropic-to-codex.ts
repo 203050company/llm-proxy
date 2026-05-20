@@ -316,11 +316,10 @@ export function translateAnthropicToCodexRequest(
 
   // Reasoning effort: thinking config > suffix > config default
   const thinkingEffort = mapThinkingToEffort(req.thinking);
-  const isGeminiModel = modelId.startsWith("gemini-");
   const effort =
     thinkingEffort ??
     parsed.reasoningEffort ??
-    (isGeminiModel ? null : cfg.default_reasoning_effort);
+    cfg.default_reasoning_effort;
   if (effort) {
     request.reasoning = { effort, summary: "auto" };
   }

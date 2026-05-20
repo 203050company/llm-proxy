@@ -10,7 +10,6 @@ import { jitter } from "../utils/jitter.js";
 import type { AccountPool } from "./account-pool.js";
 import type { UsageStatsStore } from "./usage-stats.js";
 import type { ApiKeyPool } from "./api-key-pool.js";
-import type { GeminiAccountPool } from "./gemini-account-pool.js";
 
 const INITIAL_DELAY_MS = 3_000;
 
@@ -19,14 +18,12 @@ export class SnapshotTimer {
   private stopped = false;
   private pool: AccountPool;
   private apiKeyPool?: ApiKeyPool;
-  private geminiPool?: GeminiAccountPool;
   private usageStats: UsageStatsStore;
 
-  constructor(pool: AccountPool, usageStats: UsageStatsStore, apiKeyPool?: ApiKeyPool, geminiPool?: GeminiAccountPool) {
+  constructor(pool: AccountPool, usageStats: UsageStatsStore, apiKeyPool?: ApiKeyPool) {
     this.pool = pool;
     this.usageStats = usageStats;
     this.apiKeyPool = apiKeyPool;
-    this.geminiPool = geminiPool;
   }
 
   start(): void {
@@ -56,7 +53,7 @@ export class SnapshotTimer {
 
   private tick(): void {
     try {
-      this.usageStats.recordSnapshot(this.pool, this.apiKeyPool, this.geminiPool);
+      this.usageStats.recordSnapshot(this.pool, this.apiKeyPool);
     } catch (err) {
       console.warn("[SnapshotTimer] Failed to record snapshot:", err instanceof Error ? err.message : err);
     }
@@ -84,11 +81,10 @@ export function startQuotaRefresh(
   accountPool: AccountPool,
   usageStats?: UsageStatsStore,
   apiKeyPool?: ApiKeyPool,
-  geminiPool?: GeminiAccountPool,
 ): void {
   _instance?.stop();
   if (!usageStats) return;
-  _instance = new SnapshotTimer(accountPool, usageStats, apiKeyPool, geminiPool);
+  _instance = new SnapshotTimer(accountPool, usageStats, apiKeyPool);
   _instance.start();
 }
 

@@ -2,12 +2,11 @@
  * Shared tool format conversion utilities.
  *
  * Converts tool definitions and tool_choice from each protocol
- * (OpenAI, Anthropic, Gemini) into the Codex Responses API format.
+ * (OpenAI, Anthropic) into the Codex Responses API format.
  */
 
 import type { ChatCompletionRequest } from "../types/openai.js";
 import type { AnthropicMessagesRequest } from "../types/anthropic.js";
-import type { GeminiGenerateContentRequest } from "../types/gemini.js";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -71,10 +70,6 @@ function normalizeHostedWebSearchTool(tool: Record<string, unknown>): CodexHoste
     def.user_location = tool.user_location;
   }
   return def;
-}
-
-function hasGeminiHostedSearch(tool: Record<string, unknown>): boolean {
-  return isRecord(tool.googleSearch) || isRecord(tool.googleSearchRetrieval);
 }
 
 function looksLikeClaudeCodeWebSearchTool(tool: Record<string, unknown>): boolean {
@@ -252,48 +247,6 @@ export function anthropicToolChoiceToCodex(
         return { type: "web_search" };
       }
       return { type: "function", name: choice.name };
-    default:
-      return undefined;
-  }
-}
-
-// ── Gemini → Codex ──────────────────────────────────────────────
-
-export function geminiToolsToCodex(
-  tools: NonNullable<GeminiGenerateContentRequest["tools"]>,
-): CodexTool[] {
-  const defs: CodexTool[] = [];
-  for (const toolGroup of tools) {
-    if (hasGeminiHostedSearch(toolGroup)) {
-      defs.push({ type: "web_search" });
-    }
-
-    if (toolGroup.functionDeclarations) {
-      for (const fd of toolGroup.functionDeclarations) {
-        const def: CodexToolDefinition = {
-          type: "function",
-          name: fd.name,
-        };
-        if (fd.description) def.description = fd.description;
-        if (fd.parameters) def.parameters = normalizeSchema(fd.parameters);
-        defs.push(def);
-      }
-    }
-  }
-  return defs;
-}
-
-export function geminiToolConfigToCodex(
-  config: GeminiGenerateContentRequest["toolConfig"],
-): string | undefined {
-  if (!config?.functionCallingConfig?.mode) return undefined;
-  switch (config.functionCallingConfig.mode) {
-    case "AUTO":
-      return "auto";
-    case "NONE":
-      return "none";
-    case "ANY":
-      return "required";
     default:
       return undefined;
   }

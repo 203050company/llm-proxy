@@ -1,7 +1,7 @@
 /**
  * Shared Codex SSE event data extraction layer.
  *
- * The three translation files (OpenAI, Anthropic, Gemini) all extract
+ * The OpenAI and Anthropic translation files extract
  * the same data from Codex events — this module centralizes that logic.
  */
 

@@ -9,9 +9,6 @@ import { AddAccount } from "./components/AddAccount";
 import { AccountList } from "./components/AccountList";
 import { SettingsTab } from "./components/SettingsTab";
 import { ProxyPool } from "./components/ProxyPool";
-import { ProviderAccountSections } from "./components/ProviderAccountSections";
-import { GeminiAccountList } from "./components/GeminiAccountList";
-import { Footer } from "./components/Footer";
 import { ApiKeyManager } from "./components/ApiKeyManager";
 import { ProxySettings } from "./pages/ProxySettings";
 import { AccountManagement } from "./pages/AccountManagement";
@@ -19,7 +16,6 @@ import { UsageStats } from "./pages/UsageStats";
 import { LogsPage } from "./pages/LogsPage";
 import { ErrorsPage } from "./pages/ErrorsPage";
 import { useAccounts } from "../../shared/hooks/use-accounts";
-import { useGeminiAccounts } from "../../shared/hooks/use-gemini-accounts";
 import { useErrorLogsCount } from "../../shared/hooks/use-error-logs";
 import { useProxies } from "../../shared/hooks/use-proxies";
 import { useStatus } from "../../shared/hooks/use-status";
@@ -102,14 +98,13 @@ export function TabBar({ activeHash }: { activeHash: string }) {
 
 function Dashboard() {
   const accounts = useAccounts();
-  const geminiAccounts = useGeminiAccounts();
   const proxies = useProxies();
   const status = useStatus(accounts.list.length);
   const update = useUpdateMessage();
   const { onLogout } = useDashboardAuthCtx();
   const [showModal, setShowModal] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
-  const [addProvider, setAddProvider] = useState<"codex" | "gemini" | null>(null);
+  const [addProvider, setAddProvider] = useState<"codex" | null>(null);
   const hash = useHash();
   const errorCount = useErrorLogsCount();
 
@@ -146,63 +141,43 @@ function Dashboard() {
       <main class="flex-grow px-4 md:px-8 lg:px-40 py-8 flex justify-center">
         <div class="flex flex-col w-full max-w-[960px]">
           <AddAccount
-            visible={showAdd || accounts.addVisible || geminiAccounts.addVisible}
+            visible={showAdd || accounts.addVisible}
             provider={addProvider}
             onChooseProvider={setAddProvider}
             onStartCodex={accounts.startAdd}
-            onStartGemini={geminiAccounts.startAdd}
             onCancel={() => {
               setShowAdd(false);
               setAddProvider(null);
               accounts.cancelAdd();
-              geminiAccounts.cancelAdd();
             }}
             onSubmitRelay={async (provider, callbackUrl) => {
               if (provider === "codex") {
                 await accounts.submitRelay(callbackUrl);
-              } else {
-                await geminiAccounts.submitRelay(callbackUrl);
               }
             }}
             onAddByRefreshToken={accounts.addByRefreshToken}
-            onImportGeminiCli={geminiAccounts.importCli}
-            addInfo={accounts.addInfo || geminiAccounts.addInfo}
-            addError={accounts.addError || geminiAccounts.addError}
+            addInfo={accounts.addInfo}
+            addError={accounts.addError}
           />
 
           <TabBar activeHash={activeTab} />
 
           {activeTab === "" && (
             <div class="flex flex-col gap-6">
-              <ProviderAccountSections
-                codex={(
-                  <AccountList
-                    accounts={accounts.list}
-                    loading={accounts.loading}
-                    onDelete={accounts.deleteAccount}
-                    onRefresh={accounts.refresh}
-                    refreshing={accounts.refreshing}
-                    lastUpdated={accounts.lastUpdated}
-                    proxies={proxies.proxies}
-                    onProxyChange={handleProxyChange}
-                    onExport={accounts.exportAccounts}
-                    onImport={accounts.importAccounts}
-                    onToggleStatus={accounts.toggleStatus}
-                    onUpdateLabel={accounts.updateLabel}
-                    apiKey={status.apiKey}
-                  />
-                )}
-                gemini={(
-                  <GeminiAccountList
-                    accounts={geminiAccounts.list}
-                    loading={geminiAccounts.loading}
-                    refreshing={geminiAccounts.refreshing}
-                    onRefresh={geminiAccounts.refresh}
-                    onDelete={geminiAccounts.deleteAccount}
-                    onHealthCheck={geminiAccounts.healthCheck}
-                    onImportCli={geminiAccounts.importCli}
-                  />
-                )}
+              <AccountList
+                accounts={accounts.list}
+                loading={accounts.loading}
+                onDelete={accounts.deleteAccount}
+                onRefresh={accounts.refresh}
+                refreshing={accounts.refreshing}
+                lastUpdated={accounts.lastUpdated}
+                proxies={proxies.proxies}
+                onProxyChange={handleProxyChange}
+                onExport={accounts.exportAccounts}
+                onImport={accounts.importAccounts}
+                onToggleStatus={accounts.toggleStatus}
+                onUpdateLabel={accounts.updateLabel}
+                apiKey={status.apiKey}
               />
               <ProxyPool proxies={proxies} />
             </div>

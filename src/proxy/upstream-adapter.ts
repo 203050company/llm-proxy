@@ -2,7 +2,7 @@
  * UpstreamAdapter — abstract interface for all upstream API backends.
  *
  * Both the existing CodexApi and new API-key-based adapters (OpenAI,
- * Anthropic, Gemini) implement this interface so the proxy handler can
+ * Anthropic) implement this interface so the proxy handler can
  * treat them uniformly.
  */
 

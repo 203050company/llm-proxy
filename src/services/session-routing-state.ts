@@ -70,6 +70,5 @@ function normalizeFilter(value: string | null | undefined): string | null {
 
 function providerMatches(provider: string, filter: string | null): boolean {
   if (!filter) return true;
-  if (filter === "gemini") return provider === "gemini" || provider.startsWith("gemini-");
   return provider === filter;
 }

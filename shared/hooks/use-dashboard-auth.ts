@@ -46,7 +46,7 @@ function installFetchInterceptor(): void {
     if (resp.status === 401) {
       // Only fire for dashboard endpoints, not for proxy API routes
       const url = typeof input === "string" ? input : input instanceof URL ? input.pathname : (input as Request).url;
-      const isProxyApi = url.includes("/v1/") || url.includes("/v1beta/");
+      const isProxyApi = url.includes("/v1/");
       if (!isProxyApi) {
         const probe = resp.clone();
         const body = await probe.json().catch(() => null) as { error?: string } | null;

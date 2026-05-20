@@ -18,7 +18,7 @@ interface AffinityEntry {
    *  produced this response. Used by routes that need to keep concurrent
    *  variants of the same conversation (sub-agents, parallel tool calls)
    *  on independent prev_response_id chains. Optional for back-compat with
-   *  routes that don't compute it (e.g. [Responses] / [Chat] / [Gemini]). */
+   *  routes that don't compute it (e.g. [Responses] / [Chat]). */
   variantHash?: string;
   createdAt: number;
 }

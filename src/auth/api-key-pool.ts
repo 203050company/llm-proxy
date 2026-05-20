@@ -2,7 +2,7 @@
  * ApiKeyPool — CRUD + persistence for third-party API keys.
  *
  * Each entry binds one API key to one specific model.
- * Built-in providers (openai/anthropic/gemini) have default base URLs;
+ * Built-in providers (openai/anthropic/openrouter) have default base URLs;
  * custom providers require a user-supplied base URL.
  */
 

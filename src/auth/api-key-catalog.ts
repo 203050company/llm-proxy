@@ -3,7 +3,7 @@
  * Custom providers are not listed here — users supply their own model IDs.
  */
 
-export type BuiltinProvider = "anthropic" | "openai" | "gemini" | "openrouter";
+export type BuiltinProvider = "anthropic" | "openai" | "openrouter";
 export type ApiKeyProvider = BuiltinProvider | "custom";
 
 export interface CatalogModel {
@@ -35,21 +35,11 @@ const OPENAI_MODELS: CatalogModel[] = [
   { id: "o4-mini", displayName: "o4 Mini" },
 ];
 
-const GEMINI_MODELS: CatalogModel[] = [
-  { id: "gemini-3.1-pro", displayName: "Gemini 3.1 Pro" },
-  { id: "gemini-3-pro", displayName: "Gemini 3 Pro" },
-  { id: "gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash-Lite" },
-  { id: "gemini-3-flash", displayName: "Gemini 3 Flash" },
-  { id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash" },
-];
 
 const OPENROUTER_MODELS: CatalogModel[] = [
   { id: "anthropic/claude-opus-4.6", displayName: "Claude Opus 4.6" },
   { id: "anthropic/claude-sonnet-4.6", displayName: "Claude Sonnet 4.6" },
   { id: "openai/gpt-5.4", displayName: "GPT-5.4" },
-  { id: "google/gemini-3.1-pro", displayName: "Gemini 3.1 Pro" },
-  { id: "google/gemini-3-pro", displayName: "Gemini 3 Pro" },
-  { id: "google/gemini-3.1-flash-lite", displayName: "Gemini 3.1 Flash Lite" },
   { id: "deepseek/deepseek-v3.2", displayName: "DeepSeek V3.2" },
   { id: "deepseek/deepseek-r1", displayName: "DeepSeek R1" },
   { id: "meta-llama/llama-4-maverick", displayName: "Llama 4 Maverick" },
@@ -68,11 +58,6 @@ export const PROVIDER_CATALOG: Record<BuiltinProvider, ProviderMeta> = {
     defaultBaseUrl: "https://api.openai.com/v1",
     models: OPENAI_MODELS,
   },
-  gemini: {
-    displayName: "Google Gemini",
-    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta",
-    models: GEMINI_MODELS,
-  },
   openrouter: {
     displayName: "OpenRouter",
     defaultBaseUrl: "https://openrouter.ai/api/v1",
@@ -82,5 +67,5 @@ export const PROVIDER_CATALOG: Record<BuiltinProvider, ProviderMeta> = {
 
 /** Check whether a provider name is one of the built-in providers. */
 export function isBuiltinProvider(provider: string): provider is BuiltinProvider {
-  return provider === "anthropic" || provider === "openai" || provider === "gemini" || provider === "openrouter";
+  return provider === "anthropic" || provider === "openai" || provider === "openrouter";
 }

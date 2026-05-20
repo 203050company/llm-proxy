@@ -156,10 +156,6 @@ function describeAvailability(accountPool: AccountPool, model: string, excludeEn
 }
 
 const MAX_EMPTY_RETRIES = 2;
-const DIRECT_GEMINI_MODEL_FALLBACKS: Record<string, string[]> = {
-  "gemini-3.1-pro": ["gemini-3-pro", "gemini-3.1-flash-lite"],
-  "gemini-3-pro": ["gemini-3.1-flash-lite"],
-};
 
 /** Upper bound on how stale an implicit-resume `previous_response_id` may be.
  *  Must stay in sync with `DEFAULT_POOL_CONFIG.maxAgeMs` (3_300_000 ms) in
@@ -187,26 +183,6 @@ function recordUpstreamEmptyResponse(upstream: UpstreamAdapter): void {
 
 function recordUpstreamSuccessfulResponse(upstream: UpstreamAdapter): void {
   upstream.recordSuccessfulResponse?.();
-}
-
-function nextDirectGeminiFallbackModel(upstream: UpstreamAdapter, model: string): string | null {
-  if (upstream.tag !== "gemini-oauth") return null;
-  const chain = DIRECT_GEMINI_MODEL_FALLBACKS[model];
-  return chain?.[0] ?? null;
-}
-
-function shouldFallbackDirectGeminiModel(upstream: UpstreamAdapter, err: unknown): boolean {
-  return upstream.tag === "gemini-oauth" && err instanceof CodexApiError && err.status === 429;
-}
-
-function setProxyRequestModel(req: ProxyRequest, model: string): void {
-  req.codexRequest.model = model;
-  req.model = model;
-}
-
-function modelFallbackNotice(model: string): string {
-  const particle = model === "gemini-3.1-flash-lite" ? "로" : "으로";
-  return `모든 계정이 사용량 한도에 도달 했으므로 모델을 ${model} ${particle} 변경합니다`;
 }
 
 async function sleepMs(ms: number): Promise<void> {
@@ -1173,7 +1149,7 @@ async function handleNonStreaming(options: HandleNonStreamingOptions): Promise<R
 }
 
 /**
- * Lightweight handler for API-key-based upstreams (OpenAI, Anthropic, Gemini, custom).
+ * Lightweight handler for API-key-based upstreams (OpenAI, Anthropic, custom).
  * No account pool management, no session affinity, no retry logic — just proxy + translate.
  */
 export async function handleDirectRequest(options: HandleDirectRequestOptions): Promise<Response> {
@@ -1183,7 +1159,6 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
 
   const requestId = c.get("requestId") ?? randomUUID().slice(0, 8);
   const requestedModel = req.codexRequest.model;
-  const fallbackNotices: string[] = [];
 
   const logDirectAttempt = (
     startMs: number,
@@ -1232,16 +1207,6 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
         const msg = err instanceof Error ? err.message : "Upstream request failed";
         const status = err instanceof CodexApiError ? err.status : 502;
         logDirectAttempt(startMs, status, msg);
-
-        const fallbackModel = nextDirectGeminiFallbackModel(upstream, req.codexRequest.model);
-        if (fallbackModel && shouldFallbackDirectGeminiModel(upstream, err)) {
-          const notice = modelFallbackNotice(fallbackModel);
-          console.warn(`[${fmt.tag}] ${notice}`);
-          fallbackNotices.push(notice);
-          setProxyRequestModel(req, fallbackModel);
-          rateLimitRetries = 0;
-          continue;
-        }
 
         const retryAfterMs = parseRetryAfterMs(err);
         if (retryAfterMs != null && rateLimitRetries < MAX_EMPTY_RETRIES) {
@@ -1355,8 +1320,7 @@ export async function handleDirectRequest(options: HandleDirectRequestOptions): 
     }
   } catch (err) {
     abortController.abort();
-    const prefix = fallbackNotices.length ? `${fallbackNotices.join("\n")}\n` : "";
-    const msg = prefix + (err instanceof Error ? err.message : "Failed to collect upstream response");
+    const msg = err instanceof Error ? err.message : "Failed to collect upstream response";
     const code = toErrorStatus(0) as StatusCode;
     c.status(code);
     return c.json(fmt.formatError(code, msg));

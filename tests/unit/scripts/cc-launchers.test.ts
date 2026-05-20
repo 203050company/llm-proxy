@@ -100,7 +100,6 @@ function runCcOpencode(args: string[], env: Record<string, string> = {}): string
 describe("Claude Code launcher scripts", () => {
   it.each([
     ["cc-codex", 'BASE_URL="http://127.0.0.1:$PORT"'],
-    ["cc-gemini", 'BASE_URL="http://127.0.0.1:$PORT"'],
     ["cc-opencode", 'BASE_URL="${CC_OPENCODE_BASE_URL:-http://127.0.0.1:$PORT}"'],
   ])("%s uses the proxy origin as ANTHROPIC_BASE_URL", (name, expectedBaseUrl) => {
     const script = readLauncher(name);
@@ -111,7 +110,6 @@ describe("Claude Code launcher scripts", () => {
 
   it.each([
     ["cc-codex", 'curl -s "$BASE_URL/health"'],
-    ["cc-gemini", 'curl -s "$BASE_URL/health"'],
     ["cc-opencode", 'curl -fsS "$BASE_URL/health"'],
   ])("%s checks the actual health endpoint", (name, expectedHealthCheck) => {
     const script = readLauncher(name);
@@ -120,39 +118,10 @@ describe("Claude Code launcher scripts", () => {
     expect(script).not.toContain('curl -s "$BASE_URL/admin/health"');
   });
 
-  it("cc-gemini defaults Claude Code to bare mode", () => {
-    const script = readLauncher("cc-gemini");
+  it("cc-codex uses a proxy-specific Claude config dir for every invocation", () => {
+    const script = readLauncher("cc-codex");
 
-    expect(script).toContain("CC_GEMINI_BARE:-1");
-    expect(script).toContain("CLAUDE_ARGS+=(--bare)");
-    expect(script).toContain('claude "${CLAUDE_ARGS[@]}" "$@"');
-  });
-
-  it("cc-gemini pins every Claude Code model env to Gemini models", () => {
-    const script = readLauncher("cc-gemini");
-
-    expect(script).toContain('export ANTHROPIC_MODEL="${MODEL}[1m]"');
-    expect(script).toContain('export ANTHROPIC_DEFAULT_SONNET_MODEL="${MODEL}[1m]"');
-    expect(script).toContain('export ANTHROPIC_DEFAULT_OPUS_MODEL="${MODEL}[1m]"');
-    expect(script).toContain('export ANTHROPIC_SMALL_FAST_MODEL="gemini-3.1-flash-lite[1m]"');
-    expect(script).toContain('export ANTHROPIC_DEFAULT_HAIKU_MODEL="gemini-3.1-flash-lite[1m]"');
-  });
-
-  it("cc-gemini auto-applies a default proxy Gemini account when CLI auth drifts", () => {
-    const script = readLauncher("cc-gemini");
-
-    expect(script).toContain("CC_GEMINI_SYNC_CLI_AUTH:-1");
-    expect(script).toContain("/auth/gemini/cli-auth");
-    expect(script).toContain("/auth/gemini/cli-auth/apply-default");
-  });
-
-  it.each([
-    ["cc-codex", "codex"],
-    ["cc-gemini", "gemini"],
-  ])("%s uses a proxy-specific Claude config dir for every invocation", (name, namespace) => {
-    const script = readLauncher(name);
-
-    expect(script).toContain(`local agent_config_dir=\"$HOME/.claude-agent-view/${namespace}\"`);
+    expect(script).toContain('local agent_config_dir="$HOME/.claude-agent-view/codex"');
     expect(script).toContain("export CLAUDE_CONFIG_DIR");
     expect(script).toContain('CLAUDE_CONFIG_DIR="$(prepare_agent_view_config)"');
     expect(script).not.toContain('if [ "${1:-}" = "agents" ]; then');
