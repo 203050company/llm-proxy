@@ -9,7 +9,10 @@ import {
   getModelAliases,
   getModelInfo,
   getModelStoreDebug,
+  parseModelName,
+  buildDisplayModelName,
   type CodexModelInfo,
+  stripClaudeCodeContextSuffix,
 } from "../models/model-store.js";
 import { triggerImmediateRefresh } from "../models/model-fetcher.js";
 import { getConfig } from "../config.js";
@@ -32,31 +35,73 @@ type ModelInfoResponse = CodexModelInfo & {
   max_context_window?: number;
 };
 
+function getCustomContextLimit(id: string): number | undefined {
+  const normalizedId = id.toLowerCase();
+  if (normalizedId.endsWith("[200k]")) return 200000;
+  if (normalizedId.endsWith("[250k]")) return 250000;
+  if (normalizedId.endsWith("[300k]")) return 300000;
+  if (normalizedId.endsWith("[400k]")) return 400000;
+  if (normalizedId.endsWith("[1m]")) return 400000;
+  return undefined;
+}
+
+function getContextMetadata(info: CodexModelInfo, id: string): {
+  contextLimit?: number;
+  maxContextLimit?: number;
+} {
+  const customLimit = getCustomContextLimit(id);
+  const contextLimit = customLimit ?? info.contextWindow;
+  if (contextLimit === undefined) return {};
+
+  const maxContextLimit = customLimit !== undefined
+    ? Math.min(info.maxContextWindow ?? contextLimit, contextLimit)
+    : info.maxContextWindow;
+
+  return { contextLimit, maxContextLimit };
+}
+
+function getResponseDisplayName(info: CodexModelInfo, id: string): string {
+  const strippedId = stripClaudeCodeContextSuffix(id);
+  if (strippedId === info.id) return info.displayName;
+  return buildDisplayModelName(parseModelName(strippedId));
+}
+
 function toModelInfoResponse(info: CodexModelInfo, id = info.id): ModelInfoResponse {
+  const { contextLimit, maxContextLimit } = getContextMetadata(info, id);
+  const displayName = getResponseDisplayName(info, id);
   return {
     ...info,
     id,
+    displayName,
     type: "model",
-    display_name: info.displayName,
-    ...(info.contextWindow !== undefined ? { context_window: info.contextWindow, max_input_tokens: info.contextWindow } : {}),
+    display_name: displayName,
+    ...(contextLimit !== undefined ? {
+      contextWindow: contextLimit,
+      context_window: contextLimit,
+      max_input_tokens: contextLimit,
+    } : {}),
     ...(info.inputContextWindow !== undefined ? { input_context_window: info.inputContextWindow } : {}),
     ...(info.maxOutputTokens !== undefined ? { max_output_tokens: info.maxOutputTokens, max_tokens: info.maxOutputTokens } : {}),
-    ...(info.maxContextWindow !== undefined ? { max_context_window: info.maxContextWindow } : {}),
+    ...(maxContextLimit !== undefined ? {
+      maxContextWindow: maxContextLimit,
+      max_context_window: maxContextLimit,
+    } : {}),
   };
 }
 
-function toOpenAIModel(info: CodexModelInfo): OpenAIModel {
+function toOpenAIModel(info: CodexModelInfo, id = info.id): OpenAIModel {
+  const { contextLimit, maxContextLimit } = getContextMetadata(info, id);
   return {
-    id: info.id,
+    id,
     object: "model",
     type: "model",
-    display_name: info.displayName,
+    display_name: getResponseDisplayName(info, id),
     created: MODEL_CREATED_TIMESTAMP,
     owned_by: "openai",
-    ...(info.contextWindow !== undefined ? { context_window: info.contextWindow, max_input_tokens: info.contextWindow } : {}),
+    ...(contextLimit !== undefined ? { context_window: contextLimit, max_input_tokens: contextLimit } : {}),
     ...(info.inputContextWindow !== undefined ? { input_context_window: info.inputContextWindow } : {}),
     ...(info.maxOutputTokens !== undefined ? { max_output_tokens: info.maxOutputTokens, max_tokens: info.maxOutputTokens } : {}),
-    ...(info.maxContextWindow !== undefined ? { max_context_window: info.maxContextWindow } : {}),
+    ...(maxContextLimit !== undefined ? { max_context_window: maxContextLimit } : {}),
   };
 }
 
@@ -82,7 +127,7 @@ function toOpencodeGoOpenAIModel(model: { alias: string; displayName: string }):
 }
 
 function toListedModel(info: CodexModelInfo, id = info.id): OpenAIModel {
-  return { ...toOpenAIModel(info), id };
+  return { ...toOpenAIModel(info, id), id };
 }
 
 function getListedModelIds(info: CodexModelInfo): string[] {
@@ -100,20 +145,44 @@ function getListedModelIds(info: CodexModelInfo): string[] {
     const suffixedId = `${info.id}-${effort}`;
     if (suffixedId !== info.id) ids.push(suffixedId);
   }
+
+  // Add suffix variations if the model supports large context
+  const context = Math.max(info.contextWindow ?? 0, info.maxContextWindow ?? 0);
+  const contextSuffixes: string[] = [];
+  if (context >= 400000) {
+    contextSuffixes.push("[200k]", "[250k]", "[300k]", "[400k]", "[1m]");
+  }
+
+  if (contextSuffixes.length > 0) {
+    const baseIds = [...ids];
+    for (const baseId of baseIds) {
+      for (const suffix of contextSuffixes) {
+        ids.push(`${baseId}${suffix}`);
+      }
+    }
+  }
+
   return ids;
 }
 
+function getListedAliasIds(alias: string, info: CodexModelInfo): string[] {
+  return getListedModelIds({ ...info, id: alias });
+}
+
 function resolveCatalogModelInfo(modelId: string): CodexModelInfo | undefined {
-  const directInfo = getModelInfo(modelId);
+  const strippedId = stripClaudeCodeContextSuffix(modelId);
+  const directInfo = getModelInfo(strippedId);
   if (directInfo) return directInfo;
 
   const aliases = getModelAliases();
-  const aliasInfo = getModelInfo(aliases[modelId] ?? "");
+  const aliasInfo = getModelInfo(aliases[strippedId] ?? "");
   if (aliasInfo) return aliasInfo;
 
   for (const effort of ["none", "minimal", "low", "medium", "high", "xhigh"]) {
-    if (modelId.endsWith(`-${effort}`)) {
-      return getModelInfo(modelId.slice(0, -(effort.length + 1)));
+    if (strippedId.endsWith(`-${effort}`)) {
+      const baseId = strippedId.slice(0, -(effort.length + 1));
+      const resolvedId = aliases[baseId] ?? baseId;
+      return getModelInfo(resolvedId);
     }
   }
 
@@ -133,8 +202,15 @@ export function createModelRoutes(apiKeyPool?: ApiKeyPool): Hono {
         modelsById.set(modelId, toListedModel(model, modelId));
       }
     }
-    for (const alias of Object.keys(aliases)) {
-      modelsById.set(alias, toRuntimeOpenAIModel(alias));
+    for (const [alias, resolvedId] of Object.entries(aliases)) {
+      const info = getModelInfo(stripClaudeCodeContextSuffix(resolvedId));
+      if (!info) {
+        modelsById.set(alias, toRuntimeOpenAIModel(alias));
+        continue;
+      }
+      for (const aliasId of getListedAliasIds(alias, info)) {
+        modelsById.set(aliasId, toListedModel(info, aliasId));
+      }
     }
     for (const modelId of apiKeyPool?.getActiveModels() ?? []) {
       modelsById.set(modelId, toRuntimeOpenAIModel(modelId));
@@ -163,7 +239,7 @@ export function createModelRoutes(apiKeyPool?: ApiKeyPool): Hono {
   app.get("/v1/models/:modelId", (c) => {
     const modelId = c.req.param("modelId");
     const info = resolveCatalogModelInfo(modelId);
-    if (info) return c.json({ ...toOpenAIModel(info), id: modelId });
+    if (info) return c.json(toOpenAIModel(info, modelId));
 
     if (apiKeyPool?.hasActiveModel(modelId)) {
       return c.json(toRuntimeOpenAIModel(modelId));

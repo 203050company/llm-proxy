@@ -9,6 +9,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { Hono } from "hono";
+import yaml from "js-yaml";
 
 // ── Mocks (before imports) ──────────────────────────────────────────
 
@@ -404,6 +405,111 @@ describe("GET /v1/models with runtime API keys", () => {
 
     const unknownRes = await app.request("/v1/models/not-a-real-model-xhigh");
     expect(unknownRes.status).toBe(404);
+  });
+
+  it("spoofs Claude context suffixes consistently in model info responses", async () => {
+    applyBackendModelsForPlan("plus", [{
+      slug: "gpt-5.5",
+      display_name: "GPT-5.5",
+      context_window: 272000,
+      max_output_tokens: 128000,
+      max_context_window: 272000,
+    }]);
+
+    const app = createModelRoutes();
+    const infoRes = await app.request("/v1/models/gpt-5.5-xhigh[400k]/info");
+    expect(infoRes.status).toBe(200);
+    const infoBody = await infoRes.json();
+
+    expect(infoBody.id).toBe("gpt-5.5-xhigh[400k]");
+    expect(infoBody.contextWindow).toBe(400000);
+    expect(infoBody.context_window).toBe(400000);
+    expect(infoBody.max_input_tokens).toBe(400000);
+    expect(infoBody.maxContextWindow).toBe(272000);
+    expect(infoBody.max_context_window).toBe(272000);
+    expect(infoBody.inputContextWindow).toBe(272000);
+    expect(infoBody.input_context_window).toBe(272000);
+  });
+
+  it("lists suffixed Claude aliases for gateway model discovery", async () => {
+    vi.mocked(yaml.load).mockReturnValueOnce({
+      models: [],
+      aliases: { "claude-opus-4-7": "gpt-5.5" },
+    });
+    loadStaticModels();
+    applyBackendModelsForPlan("plus", [{
+      slug: "gpt-5.5",
+      display_name: "GPT-5.5",
+      context_window: 272000,
+      max_output_tokens: 128000,
+      max_context_window: 272000,
+    }]);
+
+    const app = createModelRoutes();
+    const listRes = await app.request("/v1/models");
+    expect(listRes.status).toBe(200);
+    const listBody = await listRes.json();
+    const listed = listBody.data.find((m: { id: string }) => m.id === "claude-opus-4-7-xhigh[400k]");
+
+    expect(listed).toBeDefined();
+    expect(listed.display_name).toBe("gpt-5.5-xhigh");
+    expect(listed.context_window).toBe(400000);
+    expect(listed.max_input_tokens).toBe(400000);
+
+    const infoRes = await app.request("/v1/models/claude-opus-4-7-xhigh[400k]/info");
+    expect(infoRes.status).toBe(200);
+    const infoBody = await infoRes.json();
+
+    expect(infoBody.id).toBe("claude-opus-4-7-xhigh[400k]");
+    expect(infoBody.display_name).toBe("gpt-5.5-xhigh");
+    expect(infoBody.contextWindow).toBe(400000);
+    expect(infoBody.context_window).toBe(400000);
+    expect(infoBody.max_input_tokens).toBe(400000);
+  });
+
+  it("omits token limit fields for models without context metadata", async () => {
+    applyBackendModelsForPlan("plus", [{
+      slug: "gpt-image-2",
+      display_name: "GPT Image 2",
+    }]);
+
+    const app = createModelRoutes();
+    const modelRes = await app.request("/v1/models/gpt-image-2");
+    expect(modelRes.status).toBe(200);
+    const modelBody = await modelRes.json();
+
+    expect(modelBody.context_window).toBeUndefined();
+    expect(modelBody.max_input_tokens).toBeUndefined();
+    expect(modelBody.max_context_window).toBeUndefined();
+
+    const infoRes = await app.request("/v1/models/gpt-image-2/info");
+    expect(infoRes.status).toBe(200);
+    const infoBody = await infoRes.json();
+
+    expect(infoBody.contextWindow).toBeUndefined();
+    expect(infoBody.context_window).toBeUndefined();
+    expect(infoBody.max_input_tokens).toBeUndefined();
+    expect(infoBody.maxContextWindow).toBeUndefined();
+    expect(infoBody.max_context_window).toBeUndefined();
+  });
+
+  it("preserves unsuffixed max context metadata", async () => {
+    applyBackendModelsForPlan("plus", [{
+      slug: "gpt-5.4",
+      display_name: "GPT-5.4",
+      context_window: 272000,
+      max_output_tokens: 128000,
+      max_context_window: 1000000,
+    }]);
+
+    const app = createModelRoutes();
+    const modelRes = await app.request("/v1/models/gpt-5.4");
+    expect(modelRes.status).toBe(200);
+    const modelBody = await modelRes.json();
+
+    expect(modelBody.context_window).toBe(272000);
+    expect(modelBody.max_input_tokens).toBe(272000);
+    expect(modelBody.max_context_window).toBe(1000000);
   });
 
   it("excludes disabled API key models from /v1/models", async () => {

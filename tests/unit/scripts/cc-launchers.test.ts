@@ -27,8 +27,12 @@ function runCcCodex(args: string[], env: Record<string, string> = {}): string {
     [
       "#!/bin/bash",
       'printf "CLAUDE_CONFIG_DIR=%s\\n" "$CLAUDE_CONFIG_DIR"',
+      'printf "ANTHROPIC_MODEL=%s\\n" "${ANTHROPIC_MODEL:-}"',
       'printf "CLAUDE_CODE_MAX_CONTEXT_TOKENS=%s\\n" "${CLAUDE_CODE_MAX_CONTEXT_TOKENS:-}"',
+      'printf "CLAUDE_CODE_AUTO_COMPACT_WINDOW=%s\\n" "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}"',
       'printf "DISABLE_COMPACT=%s\\n" "${DISABLE_COMPACT:-}"',
+      'printf "DISABLE_AUTO_COMPACT=%s\\n" "${DISABLE_AUTO_COMPACT:-}"',
+      'printf "CLAUDE_CODE_DISABLE_1M_CONTEXT=%s\\n" "${CLAUDE_CODE_DISABLE_1M_CONTEXT:-}"',
       'printf "ARGS=%s\\n" "$*"',
       "",
     ].join("\n"),
@@ -188,11 +192,18 @@ describe("Claude Code launcher scripts", () => {
   it("cc-codex leaves Claude Code compaction enabled", () => {
     const output = runCcCodex(["--print-shape"], {
       CLAUDE_CODE_MAX_CONTEXT_TOKENS: "400000",
+      CLAUDE_CODE_AUTO_COMPACT_WINDOW: "999999",
       DISABLE_COMPACT: "1",
+      DISABLE_AUTO_COMPACT: "1",
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "1",
     });
 
+    expect(output).toContain("ANTHROPIC_MODEL=claude-opus-4-7-xhigh[1m]\n");
     expect(output).toContain("CLAUDE_CODE_MAX_CONTEXT_TOKENS=\n");
+    expect(output).toContain("CLAUDE_CODE_AUTO_COMPACT_WINDOW=400000\n");
     expect(output).toContain("DISABLE_COMPACT=\n");
+    expect(output).toContain("DISABLE_AUTO_COMPACT=\n");
+    expect(output).toContain("CLAUDE_CODE_DISABLE_1M_CONTEXT=\n");
   });
 
   it("cc-opencode leaves Claude Code compaction enabled", () => {

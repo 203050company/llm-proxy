@@ -110,9 +110,9 @@ interface NormalizedModelWithMeta extends CodexModelInfo {
 
 const SERVICE_TIER_SUFFIXES = new Set(["fast", "flex"]);
 const EFFORT_SUFFIXES = new Set(["none", "minimal", "low", "medium", "high", "xhigh"]);
-const CLAUDE_CODE_CONTEXT_SUFFIX_RE = /\[1m\]$/i;
+export const CLAUDE_CODE_CONTEXT_SUFFIX_RE = /\[(200k|250k|300k|400k|1m)\]$/i;
 
-function stripClaudeCodeContextSuffix(input: string): string {
+export function stripClaudeCodeContextSuffix(input: string): string {
   return input.replace(CLAUDE_CODE_CONTEXT_SUFFIX_RE, "");
 }
 
@@ -213,6 +213,13 @@ export class ModelStore {
         merged.push({
           ...existing,
           ...model,
+          // Preserve static (YAML) context window if it is larger or explicitly set
+          contextWindow: existing.contextWindow !== undefined && existing.contextWindow > (model.contextWindow ?? 0)
+            ? existing.contextWindow
+            : (model.contextWindow ?? existing.contextWindow),
+          maxContextWindow: existing.maxContextWindow !== undefined && existing.maxContextWindow > (model.maxContextWindow ?? 0)
+            ? existing.maxContextWindow
+            : (model.maxContextWindow ?? existing.maxContextWindow),
           description: model.description || existing.description,
           displayName: model.displayName || existing.displayName,
           supportedReasoningEfforts: _hasExplicitEfforts

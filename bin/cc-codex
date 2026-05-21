@@ -3,7 +3,8 @@
 # --- Configuration ---
 PORT=8080
 BASE_URL="http://127.0.0.1:$PORT"
-MODEL="gpt-5.3-codex" # Default codex model alias
+MODEL="claude-opus-4-7-xhigh[1m]" # Keep Claude Code on its 1M-aware path while proxy caps usable input safely.
+AUTO_COMPACT_WINDOW="400000"
 
 llm_proxy_root() {
     if [ -f "$HOME/llm-proxy/docker-compose.yml" ]; then
@@ -81,4 +82,7 @@ echo "Starting Claude Code session with model: $MODEL"
 env \
     -u CLAUDE_CODE_MAX_CONTEXT_TOKENS \
     -u DISABLE_COMPACT \
+    -u DISABLE_AUTO_COMPACT \
+    -u CLAUDE_CODE_DISABLE_1M_CONTEXT \
+    CLAUDE_CODE_AUTO_COMPACT_WINDOW="$AUTO_COMPACT_WINDOW" \
     claude "$@"
