@@ -17,27 +17,27 @@ describe("session routing admin route", () => {
     clearSessionRoutingRecords();
   });
 
-  it("returns the latest Gemini routing record on demand", async () => {
+  it("returns the latest OpenAI routing record on demand", async () => {
     recordSessionRouting({
       sessionId: "session-1",
-      provider: "gemini-oauth",
-      requestedModel: "gemini-3.1-pro",
-      actualModel: "gemini-3.1-flash-lite",
-      accountId: "gemini-account-1",
+      provider: "openai",
+      requestedModel: "gpt-4o",
+      actualModel: "gpt-4o-mini",
+      accountId: "openai-key-1",
       accountEmail: "user@example.com",
       status: 200,
     });
 
-    const res = await createApp().request("/admin/session-routing/latest?provider=gemini");
+    const res = await createApp().request("/admin/session-routing/latest?provider=openai");
     expect(res.status).toBe(200);
 
     const body = await res.json();
     expect(body.record).toMatchObject({
       sessionId: "session-1",
-      provider: "gemini-oauth",
-      requestedModel: "gemini-3.1-pro",
-      actualModel: "gemini-3.1-flash-lite",
-      accountId: "gemini-account-1",
+      provider: "openai",
+      requestedModel: "gpt-4o",
+      actualModel: "gpt-4o-mini",
+      accountId: "openai-key-1",
       accountEmail: "user@example.com",
       status: 200,
     });
@@ -47,35 +47,35 @@ describe("session routing admin route", () => {
   it("prefers an exact session record when session_id is provided", async () => {
     recordSessionRouting({
       sessionId: "session-1",
-      provider: "gemini-oauth",
-      requestedModel: "gemini-3.1-pro",
-      actualModel: "gemini-3.1-pro",
-      accountId: "gemini-account-1",
+      provider: "openai",
+      requestedModel: "gpt-4o",
+      actualModel: "gpt-4o",
+      accountId: "openai-key-1",
       accountEmail: "one@example.com",
       status: 200,
     });
     recordSessionRouting({
       sessionId: "session-2",
-      provider: "gemini-oauth",
-      requestedModel: "gemini-3.1-pro",
-      actualModel: "gemini-3.1-flash-lite",
-      accountId: "gemini-account-2",
+      provider: "openai",
+      requestedModel: "gpt-4o",
+      actualModel: "gpt-4o-mini",
+      accountId: "openai-key-2",
       accountEmail: "two@example.com",
       status: 200,
     });
 
     const res = await createApp().request(
-      "/admin/session-routing/latest?provider=gemini&session_id=session-1",
+      "/admin/session-routing/latest?provider=openai&session_id=session-1",
     );
     expect(res.status).toBe(200);
 
     const body = await res.json();
     expect(body.record.accountEmail).toBe("one@example.com");
-    expect(body.record.actualModel).toBe("gemini-3.1-pro");
+    expect(body.record.actualModel).toBe("gpt-4o");
   });
 
   it("returns 404 when no matching record has been captured", async () => {
-    const res = await createApp().request("/admin/session-routing/latest?provider=gemini");
+    const res = await createApp().request("/admin/session-routing/latest?provider=openai");
     expect(res.status).toBe(404);
 
     const body = await res.json();

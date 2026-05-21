@@ -301,10 +301,10 @@ describe("handleDirectRequest error forwarding", () => {
   it("records successful direct routing metadata for on-demand model lookups", async () => {
     const app = new Hono();
     const upstream = createMockUpstream({
-      tag: "gemini-oauth",
+      tag: "openai",
       getRoutingInfo: vi.fn(() => ({
-        model: "gemini-3.1-flash-lite",
-        accountId: "gemini-account-2",
+        model: "gpt-4o-mini",
+        accountId: "openai-key-2",
         accountEmail: "two@example.com",
       })),
     });
@@ -312,8 +312,8 @@ describe("handleDirectRequest error forwarding", () => {
     const req = {
       ...baseReq,
       clientConversationId: "session-1",
-      model: "gemini-3.1-pro",
-      codexRequest: { ...baseReq.codexRequest, model: "gemini-3.1-pro" },
+      model: "gpt-4o",
+      codexRequest: { ...baseReq.codexRequest, model: "gpt-4o" },
     };
     const fmt = createMockFormatAdapter();
 
@@ -324,13 +324,13 @@ describe("handleDirectRequest error forwarding", () => {
     const res = await app.request("/test", { method: "POST" });
     expect(res.status).toBe(200);
 
-    const record = getLatestSessionRouting({ sessionId: "session-1", provider: "gemini" });
+    const record = getLatestSessionRouting({ sessionId: "session-1", provider: "openai" });
     expect(record).toMatchObject({
       sessionId: "session-1",
-      provider: "gemini-oauth",
-      requestedModel: "gemini-3.1-pro",
-      actualModel: "gemini-3.1-flash-lite",
-      accountId: "gemini-account-2",
+      provider: "openai",
+      requestedModel: "gpt-4o",
+      actualModel: "gpt-4o-mini",
+      accountId: "openai-key-2",
       accountEmail: "two@example.com",
       status: 200,
     });

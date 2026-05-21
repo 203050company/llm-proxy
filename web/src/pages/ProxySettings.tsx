@@ -62,9 +62,6 @@ export function ProxySettings({ embedded }: { embedded?: boolean } = {}) {
     );
   }
 
-  const codexAccounts = data.accounts.filter((a) => a.provider !== "gemini");
-  const geminiAccounts = data.accounts.filter((a) => a.provider === "gemini");
-
 
   return (
     <div class="flex flex-col flex-grow">
@@ -138,20 +135,7 @@ export function ProxySettings({ embedded }: { embedded?: boolean } = {}) {
               <section>
                 <h2 class="text-[0.95rem] font-bold tracking-tight mb-3 text-slate-800 dark:text-text-main">{t("codexAccounts")}</h2>
                 <AccountTable
-                  accounts={codexAccounts}
-                  proxies={data.proxies}
-                  selectedIds={selectedIds}
-                  onSelectionChange={setSelectedIds}
-                  onSingleProxyChange={handleSingleProxyChange}
-                  filterGroup={selectedGroup}
-                  statusFilter={statusFilter}
-                  onStatusFilterChange={setStatusFilter}
-                />
-              </section>
-              <section>
-                <h2 class="text-[0.95rem] font-bold tracking-tight mb-3 text-slate-800 dark:text-text-main">{t("geminiAccounts")}</h2>
-                <AccountTable
-                  accounts={geminiAccounts}
+                  accounts={data.accounts}
                   proxies={data.proxies}
                   selectedIds={selectedIds}
                   onSelectionChange={setSelectedIds}

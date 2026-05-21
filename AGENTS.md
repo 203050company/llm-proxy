@@ -26,7 +26,7 @@ Vitest is the test framework. Add unit tests under `tests/unit/<area>/*.test.ts`
 
 ## Commit & Pull Request Guidelines
 
-Recent history uses short Conventional Commit style, for example `feat: add on-demand Gemini route status command` and `fix: include Gemini usage in dashboard totals`. Keep commits focused and imperative. Pull requests should describe the behavior change, list verification commands, note config or migration impacts, and include screenshots for visible UI changes.
+Recent history uses short Conventional Commit style, for example `feat: add provider route status command` and `fix: include provider usage in dashboard totals`. Keep commits focused and imperative. Pull requests should describe the behavior change, list verification commands, note config or migration impacts, and include screenshots for visible UI changes.
 
 ## Security & Configuration Tips
 

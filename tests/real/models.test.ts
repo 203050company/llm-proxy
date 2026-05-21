@@ -66,29 +66,6 @@ describe("real: /v1/models", () => {
   }, TIMEOUT);
 });
 
-// ── Gemini model list ────────────────────────────────────────────────
-
-describe("real: Gemini model list", () => {
-  it("/v1beta/models returns Gemini-format model list", async () => {
-    if (skip()) return;
-
-    const res = await fetch(`${PROXY_URL}/v1beta/models`, {
-      headers: headers(),
-      signal: AbortSignal.timeout(TIMEOUT),
-    });
-
-    expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
-    const models = body.models as Array<{ name: string; displayName?: string }>;
-    expect(models.length).toBeGreaterThan(0);
-
-    for (const model of models) {
-      expect(model.name).toBeDefined();
-      expect(model.name.startsWith("models/")).toBe(true);
-    }
-  }, TIMEOUT);
-});
-
 // ── /health ──────────────────────────────────────────────────────────
 
 describe("real: /health", () => {

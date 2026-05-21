@@ -23,8 +23,8 @@ models:
     defaultReasoningEffort: medium
     inputModalities: [text, image]
     outputModalities: [text]
-    contextWindow: 272000
-    maxContextWindow: 272000
+    contextWindow: 400000
+    maxContextWindow: 400000
     maxOutputTokens: 128000
     truncationPolicyLimit: 10000
     supportsPersonality: false
@@ -130,56 +130,6 @@ models:
     supportsPersonality: false
     upgrade: null
 
-  # ── Gemini Code Assist OAuth models ────────────────────────────────
-  - id: gemini-3.1-pro
-    displayName: Gemini 3.1 Pro
-    description: Highest performance Gemini Code Assist reasoning model
-    isDefault: false
-    supportedReasoningEfforts:
-      - { reasoningEffort: low,    description: "Fast" }
-      - { reasoningEffort: medium, description: "Balanced" }
-      - { reasoningEffort: high,   description: "Deep" }
-      - { reasoningEffort: xhigh,  description: "Extra high reasoning depth" }
-    defaultReasoningEffort: xhigh
-    inputModalities: [text, image]
-    outputModalities: [text]
-    contextWindow: 1000000
-    maxContextWindow: 1000000
-    maxOutputTokens: 65536
-    supportsPersonality: false
-    upgrade: null
-
-  - id: gemini-3-pro
-    displayName: Gemini 3 Pro
-    description: General purpose high performance Gemini model
-    isDefault: false
-    supportedReasoningEfforts:
-      - { reasoningEffort: medium, description: "Balanced" }
-      - { reasoningEffort: high,   description: "Deep" }
-    defaultReasoningEffort: medium
-    inputModalities: [text, image]
-    outputModalities: [text]
-    contextWindow: 1000000
-    maxContextWindow: 1000000
-    maxOutputTokens: 65536
-    supportsPersonality: false
-    upgrade: null
-
-  - id: gemini-3.1-flash-lite
-    displayName: Gemini 3.1 Flash-Lite
-    description: Fast Gemini fallback model
-    isDefault: false
-    supportedReasoningEfforts:
-      - { reasoningEffort: low, description: "Fastest" }
-    defaultReasoningEffort: low
-    inputModalities: [text]
-    outputModalities: [text]
-    contextWindow: 1000000
-    maxContextWindow: 1000000
-    maxOutputTokens: 65536
-    supportsPersonality: false
-    upgrade: null
-
   # ── Image generation (tool-invoked, not a chat model) ───────────────
   - id: gpt-image-2
     displayName: GPT Image 2
@@ -225,9 +175,6 @@ models:
 # while this gateway maps them to Codex model IDs internally.
 aliases:
   codex: gpt-5.3-codex
-  opus: gemini-3.1-pro
-  sonnet: gemini-3-pro
-  haiku: gemini-3.1-flash-lite
   claude-opus-4-7: gpt-5.5
   claude-sonnet-4-6: gpt-5.4
   claude-haiku-4-5: gpt-5.3-codex

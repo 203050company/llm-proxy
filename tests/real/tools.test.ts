@@ -57,22 +57,6 @@ const WEATHER_TOOL_RESPONSES = {
   },
 };
 
-const WEATHER_TOOL_GEMINI = {
-  functionDeclarations: [
-    {
-      name: "get_weather",
-      description: "Get the current weather for a location",
-      parameters: {
-        type: "object",
-        properties: {
-          location: { type: "string", description: "City name" },
-        },
-        required: ["location"],
-      },
-    },
-  ],
-};
-
 const TOOL_PROMPT = "What's the weather in Tokyo? Use the get_weather tool.";
 
 // ── OpenAI format: /v1/chat/completions ──────────────────────────────
@@ -228,70 +212,6 @@ describe("real: tool use via /v1/messages", () => {
       );
 
     expect(toolBlock).toBeDefined();
-  }, TOOL_TIMEOUT);
-});
-
-// ── Gemini format: /v1beta/models ───────────────────────────────────
-
-describe("real: tool use via Gemini", () => {
-  it("non-streaming: returns functionCall in candidates", async () => {
-    if (skip()) return;
-
-    const res = await fetch(`${PROXY_URL}/v1beta/models/codex:generateContent`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: TOOL_PROMPT }] }],
-        tools: [WEATHER_TOOL_GEMINI],
-      }),
-      signal: AbortSignal.timeout(TOOL_TIMEOUT),
-    });
-
-    expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
-
-    const candidates = body.candidates as Array<{
-      content: { parts: Array<{ functionCall?: { name: string; args?: Record<string, unknown> } }> };
-    }>;
-    expect(candidates.length).toBeGreaterThanOrEqual(1);
-
-    const fcPart = candidates[0].content.parts.find((p) => p.functionCall);
-    expect(fcPart).toBeDefined();
-    expect(fcPart!.functionCall!.name).toBe("get_weather");
-    expect(fcPart!.functionCall!.args).toBeDefined();
-    expect(typeof fcPart!.functionCall!.args!.location).toBe("string");
-  }, TOOL_TIMEOUT);
-
-  it("streaming: returns functionCall in SSE chunks", async () => {
-    if (skip()) return;
-
-    const res = await fetch(`${PROXY_URL}/v1beta/models/codex:streamGenerateContent`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: TOOL_PROMPT }] }],
-        tools: [WEATHER_TOOL_GEMINI],
-      }),
-      signal: AbortSignal.timeout(TOOL_TIMEOUT),
-    });
-
-    expect(res.status).toBe(200);
-    const dataLines = await collectSSE(res);
-    expect(dataLines.length).toBeGreaterThanOrEqual(1);
-
-    // Find a chunk containing functionCall
-    const fcChunk = dataLines
-      .filter((l) => l !== "[DONE]")
-      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-      .find((d): d is Record<string, unknown> => {
-        if (!d) return false;
-        const candidates = d.candidates as Array<{
-          content?: { parts?: Array<{ functionCall?: unknown }> };
-        }> | undefined;
-        return candidates?.[0]?.content?.parts?.some((p) => p.functionCall) ?? false;
-      });
-
-    expect(fcChunk).toBeDefined();
   }, TOOL_TIMEOUT);
 });
 

@@ -247,13 +247,14 @@ export class CodexApi {
   }
 
   /** Open a minimal streaming session and return the latest rate-limit event. */
-  async warmupSession(model = "gpt-5.4-mini"): Promise<ParsedRateLimit | null> {
+  async warmupSession(model = "gpt-5.4-mini", useWebSocket = true): Promise<ParsedRateLimit | null> {
     const request: CodexResponsesRequest = {
       model,
       instructions: "Reply with exactly one word: ok",
       input: [{ role: "user", content: "ok" }],
       stream: true,
       store: false,
+      useWebSocket,
     };
 
     const controller = new AbortController();
@@ -262,7 +263,7 @@ export class CodexApi {
     let sawTerminalEvent = false;
 
     try {
-      const response = await this.createResponseViaHttp(request, controller.signal);
+      const response = await this.createResponse(request, controller.signal);
       if (!response.body) return null;
 
       reader = response.body.getReader();

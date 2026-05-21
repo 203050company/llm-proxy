@@ -231,6 +231,65 @@ function contentToInputItems(
 }
 
 /**
+ * Smart Truncation Guard to prevent 400k context overflow errors.
+ * Ensures total character length (system instructions + message input content)
+ * stays safely under the 400k token limit (using 1 token ≈ 3 characters estimation).
+ */
+function applySmartTruncationGuard(
+  input: CodexInputItem[],
+  instructions: string,
+  maxContextTokens: number = 400000
+): CodexInputItem[] {
+  // 1 token = 3 characters estimation (highly conservative to prevent overflow)
+  // 400k tokens ≈ 1,200,000 characters limit.
+  // We keep a safety buffer of 50,000 tokens (150,000 chars) so the hard limit is 350,000 tokens.
+  const safetyTokens = maxContextTokens - 50000;
+  const charLimit = safetyTokens * 3;
+  let currentLength = instructions.length;
+  
+  const retainedInput: CodexInputItem[] = [];
+  
+  // Iterate backwards from the most recent messages
+  for (let i = input.length - 1; i >= 0; i--) {
+    const item = input[i];
+    let itemLength = 0;
+    
+    if ("role" in item) {
+      if (typeof item.content === "string") {
+        itemLength += item.content.length;
+      } else if (Array.isArray(item.content)) {
+        for (const part of item.content) {
+          if (part.type === "input_text" && part.text) {
+            itemLength += part.text.length;
+          }
+        }
+      }
+    } else if ("type" in item) {
+      if (item.type === "function_call") {
+        itemLength += item.arguments.length;
+      } else if (item.type === "function_call_output") {
+        itemLength += item.output.length;
+      }
+    }
+    
+    // If adding this message exceeds our safe budget, stop sliding window and discard older history
+    if (currentLength + itemLength > charLimit) {
+      break;
+    }
+    
+    currentLength += itemLength;
+    retainedInput.unshift(item); // Keep original order
+  }
+  
+  // Fallback to guarantee at least one message is returned
+  if (retainedInput.length === 0 && input.length > 0) {
+    retainedInput.push(input[input.length - 1]);
+  }
+  
+  return retainedInput;
+}
+
+/**
  * Convert an AnthropicMessagesRequest to a CodexResponsesRequest.
  *
  * Mapping:
@@ -302,7 +361,7 @@ export function translateAnthropicToCodexRequest(
   const request: CodexResponsesRequest = {
     model: modelId,
     instructions,
-    input,
+    input: applySmartTruncationGuard(input, instructions),
     stream: true,
     store: false,
     max_output_tokens: req.max_tokens,

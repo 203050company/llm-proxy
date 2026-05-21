@@ -9,6 +9,7 @@ import { toQuota } from "../auth/quota-utils.js";
 import { CodexApi } from "../proxy/codex-api.js";
 import type { ProxyPool } from "../proxy/proxy-pool.js";
 import { rateLimitToQuota } from "../proxy/rate-limit-headers.js";
+import { getConfig } from "../config.js";
 
 export interface AccountSessionWarmupResult {
   id: string;
@@ -17,6 +18,7 @@ export interface AccountSessionWarmupResult {
   result: "warmed" | "failed" | "skipped";
   durationMs?: number;
   error?: string;
+  resetAt?: number | null;
 }
 
 export interface BatchWarmupSessionsOptions {
@@ -107,8 +109,16 @@ async function warmupEligibleEntry(
   const startedAt = Date.now();
 
   try {
-    const rateLimit = await api.warmupSession();
+    let targetModel = "gpt-5.5";
+    try {
+      const config = getConfig();
+      targetModel = config.model.default || "gpt-5.5";
+    } catch {
+      // Config not loaded yet (e.g. in unit tests)
+    }
+    const rateLimit = await api.warmupSession(targetModel);
     let quota;
+    let fallbackUsed = false;
 
     if (!rateLimit) {
       // Fallback: Attempt to fetch usage/quota directly via api.warmup()
@@ -124,6 +134,7 @@ async function warmupEligibleEntry(
         };
       }
       quota = toQuota(usageResponse);
+      fallbackUsed = true;
     } else {
       quota = rateLimitToQuota(rateLimit, (entry as any).planType ?? null);
     }
@@ -135,6 +146,7 @@ async function warmupEligibleEntry(
       quota.rate_limit.limit_window_seconds,
     );
 
+    const resetAt = quota?.rate_limit?.reset_at;
     const isLimitReached =
       quota.rate_limit?.limit_reached === true ||
       quota.secondary_rate_limit?.limit_reached === true ||
@@ -148,6 +160,19 @@ async function warmupEligibleEntry(
         result: "failed",
         durationMs: Date.now() - startedAt,
         error: "rate limit reached (사용량초과)",
+        resetAt,
+      };
+    }
+
+    if (fallbackUsed) {
+      return {
+        id: entry.id,
+        email: entry.email,
+        previousStatus,
+        result: "failed",
+        durationMs: Date.now() - startedAt,
+        error: "session warmup failed (fallback to query-only)",
+        resetAt,
       };
     }
 
@@ -157,6 +182,7 @@ async function warmupEligibleEntry(
       previousStatus,
       result: "warmed",
       durationMs: Date.now() - startedAt,
+      resetAt,
     };
   } catch (err) {
     return {

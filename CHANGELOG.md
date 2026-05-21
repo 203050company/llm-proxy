@@ -30,19 +30,16 @@
 - 清掉 web 前端几处 type 与 prop 不一致：(1) `web/src/App.tsx` 给 `<AccountList>` 传了 `onAddByRefreshToken={accounts.addByRefreshToken}`，但 `AccountList.tsx` 根本没接受这个 prop —— dead prop，删掉避免误导未来读者；(2) `web/src/components/SettingsTab.tsx` 的 `modelFamilies` prop 标成 `Record<string, string[]>`，但调用方传入的是 `useStatus()` 返回的 `ModelFamily[]`（`shared/hooks/use-status.ts:11` 已 export 该接口），prop 类型与实参不一致——改为 `ModelFamily[]`；同时把 `selectedSpeed` / `onSpeedChange` 拓宽到 `string | null` 与实际语义对齐；(3) `shared/hooks/use-accounts.ts` 的导入解析里 `parsed.accounts` 直接访问 unknown 字段，在 strict 模式下不安全，先窄化成 `Record<string, unknown>` 再读 `accounts`，避免 runtime 拿到非对象 JSON 时炸；(4) `web/src/components/AccountList.test.tsx` 第 111 行 `[...makeAccounts(12, "active"), makeAccounts(2, "expired")]` 漏了 spread —— 把第二组 helper 的返回值（数组）当成单个元素塞进列表，直接破坏断言前提。改成 `...makeAccounts(2, ...)`（`web/src/App.tsx`、`web/src/components/SettingsTab.tsx`、`web/src/components/AccountList.test.tsx`、`shared/hooks/use-accounts.ts`）
 - `scripts/build/extract-fingerprint.ts` 的 `ROOT` 解析比 sibling 脚本（`apply-update.ts` / `check-update.ts` / `full-update.ts`）少一层 `..`，原写法是 `resolve(import.meta.dirname, "..")`，得到的是 `scripts/` 而不是 repo root，导致后续 `data/extracted-fingerprint.json`、`data/extracted-prompts/`、`config/extraction-patterns.yaml` 这些路径全部锚错位置——脚本表面上能跑，但读写的全是 `scripts/data/...` 这种"幽灵目录"，真实 repo 根下的 `data/` 拿不到任何更新。改为 `resolve(import.meta.dirname, "..", "..")` 与 sibling 一致；新增 `tests/unit/update-scripts-path.test.ts` 把"`scripts/build/*` 必须用 `..,..` 解析 ROOT"这条隐式约定 freeze 成显式断言，防止以后再有人复制粘贴漏一层
 - Electron 端 WS transport 触发时抛 `Dynamic require of "events" is not supported`：`packages/electron/electron/build.mjs` 把 backend bundle 成 ESM `server.mjs` 时 esbuild 把 CJS `ws` 整个打进来，包内 `require("events")` / `require("https")` 等被改写成内部 `__require` shim；ESM 模块里 `require` 是 undefined，shim 走「typeof require === undefined」分支直接 throw。WS path 只有 `previous_response_id` 才走，#468 拆分 sub-agent prev_id 链后 WS 触发频率上来才暴露这个一直存在的 bundling bug。修复：build.mjs 给 ESM build 加 `banner.js` 注入 `import { createRequire } from "module"; const require = createRequire(import.meta.url);`，让 `__require` 命中真 `require` 路径，Node builtins 正常解析；新增 `packages/electron/__tests__/build.test.ts` 中 banner 回归断言（`packages/electron/electron/build.mjs`、`packages/electron/__tests__/build.test.ts`、`src/proxy/ws-transport.ts` 注释订正）
-- Anthropic（Claude Code）路径 cache 命中率长期被 sub-agent / 并行 tool call 拖低：根因是同一个 `x-claude-code-session-id` 下不同 system + tools 的请求共享同一个 WS pool slot 与 prev_response_id 链，sub-agent 抢不到 pool 里的 WS（`per-WS strict serial`）→ `ws=bypass(busy)` → 新 WS 被上游 LB hash 到不同后端实例 → `previous_response_not_found` → strip-and-retry → 全冷重发，sub-agent 每一轮都是冷启动。修复：(1) 新增 `src/routes/shared/variant-hash.ts`，用 `sha256(instructions + JSON.stringify(tools)).slice(0,12)` 算 12 字符 variantHash 作为请求"形状指纹"；(2) WS pool key 从 `entryId:convId` 扩成 `entryId:convId:variantHash`，同 conv 内不同 variant 各自独占 WS / 后端实例，互不挤占；(3) `SessionAffinityMap.record` / `lookupLatestResponseIdByConversationId` 增加可选 `variantHash` 维度（不传保持原行为，兼容 `[Responses]` / `[Chat]` / `[Gemini]` 路径），让 sub-agent 续到自己的 prev id 链而不是误读主对话的；(4) implicit-resume 查 affinity 时同时传 `IMPLICIT_RESUME_MAX_AGE_MS = 55 * 60 * 1000`（贴 `ws-pool` 自身 55min `max_age_ms` 上限），超过这个时间窗的 prev id 直接当 null，避免发已被上游驱逐的 id 触发必败 round-trip。客户端可见的 `prompt_cache_key` 不变，variantHash 只在 proxy 内部用于隔离。实测 36 个 Claude Code 请求覆盖 4 个 variant：`previous_response_not_found` 从一日 35 次 → 0、`ws=bypass(busy/factory_error)` 从一日 76 次 → 0、命中率 < 50% 的请求占比从 7% → 0%（`src/routes/shared/proxy-handler.ts`、`src/auth/session-affinity.ts`、`src/routes/shared/variant-hash.ts`、`tests/unit/routes/shared/variant-hash.test.ts`、`tests/unit/auth/session-affinity.test.ts`、`tests/unit/routes/implicit-resume-from-derived-key.test.ts`）
 - 同一 session 下多个 subagent / 并行 agent 的隐式续链隔离再加固：`variantHash` 现在纳入本地-only `variantIdentity`（`x-codex-window-id`，以及显式 session / `prompt_cache_key` 场景下的首条 user anchor），保证上游 `prompt_cache_key` 仍共享同一缓存键，但 proxy 本地 `previous_response_id` 链和 WS pool slot 不会把同形 subagent 串到一起。补回归测试覆盖单对话多轮、多个对话交错、无显式 session、同 session 同 system/tools 不同任务，以及“请求内容完全相同、仅 Codex window id 不同”的 subagent 隔离（`src/routes/shared/proxy-handler.ts`、`src/routes/shared/variant-hash.ts`、`tests/unit/routes/implicit-resume-from-derived-key.test.ts`、`tests/unit/routes/shared/variant-hash.test.ts`）
 - `/v1/responses` streaming 提前断流时不再让客户端只看到裸 EOF：HTTP/WS passthrough 现在追踪 `response.completed` / `response.failed` / `error` 终止事件；上游在终止事件前结束或 WebSocket 首帧后中断时，会合成 `response.failed`（`code=stream_disconnected`）或让上层转换为该失败事件，避免 Codex CLI 报 `stream disconnected before completion: stream closed before response.completed` 且没有结构化错误
 - 恢复模型名 `-fast` 后缀的上游出口语义：`gpt-5.4-high-fast` / `codex-fast` 仍先解析为标准模型名 + `service_tier=fast`，最终发往 Codex backend 时再映射成官方接受的 `service_tier="priority"`（HTTP SSE 与 WebSocket 路径一致）；补回单测和 `/v1/responses` E2E，防止 PR #453 的 review quota plumbing 再次把 `service_tier` 丢掉
 - Dashboard 更新状态兼容旧响应：`/admin/update-status` 尚未返回 `settings` 字段时，前端默认按 `show_update_dialog=false` 处理，避免读取 `settings.show_update_dialog` 抛错导致页面白屏
 - Official Codex app-server bridge 审计加固：首批并发请求现在复用同一个 WebSocket 连接与 `initialize` 流程，避免 CONNECTING 阶段重复建连/覆盖 `this.ws`；并发 turn SSE 改为串行执行，避免共享 notification queue 把 A/B 两个 turn 的 delta/completed 交叉发错；`/official-agent/*` 改用独立 `official_agent.api_key`，不再复用通用 `server.proxy_api_key`，并限制 `approvalPolicy` 只能是 `untrusted` / `on-request` / `on-failure` / `never`
 - 隐式续链反向校验缺失导致客户端持续看到上游 `invalid_request_error: No tool output found for function call call_X`：`evaluateImplicitResume` 此前只做 forward 检查（新输入里的 `function_call_output.call_id` 必须命中上一轮 stored function_call），漏了反向（上一轮 stored function_call 必须在新输入里有 output）。当上一轮模型并发吐 N 个 tool_use、客户端只回 N-1 个 tool_result 时，proxy 仍然 resume + `previous_response_id` 发出去，上游存的 context 里那个未回复的 function_call 触发 400。新增反向检查 → 走完整重放（`reason: "unanswered_tool_calls"`），同时 `error-classification.ts` 加 `isUnansweredFunctionCallError`，proxy-handler catch 块兜底：strip `previous_response_id` + 完整历史重放 + 同账号重试一次（与 `previous_response_not_found` 同款），避免 ws/sse 路径上的 400 静默吞掉变成 502
-- `codex-to-anthropic.ts` / `codex-to-openai.ts` / `codex-to-gemini.ts` 非流式 collect 路径里把上游错误事件抛成 `new Error(...)`，丢失 status 信息，handleNonStreaming 的 collectErr 再通过正则匹配 `HTTP/X.X NNN` 状态码必然失败 → 一律 502 兜底，客户端拿到的是模糊的 502 而不是上游真实的 400/429。改为统一 `codexApiErrorFromEvent(evt.error)` 抛 `CodexApiError(status, body)`，按 error code 映射到 400/401/402/403/429（默认 502）；handleNonStreaming 的 collectErr 也加一条 `instanceof CodexApiError` 分支直接透传 status，不再走正则降级
 - `streamResponse` 流式路径里上游错误此前只往 SSE 写一条 `stream_error` 事件、零日志，客户端能看到错误但 proxy `dev-YYYY-MM-DD.log` 里完全没记录，排查时无证据链。catch 块加 `console.warn` 打 `status / msg / body`，留下 call_id 等关键现场
 
 ### Changed
 
-- `handleProxyRequest` / `handleDirectRequest` 改为 named options object 调用契约，顺带把 private `handleNonStreaming` 的 20 个位置参数收敛成内部 options object，避免后续新增可选上下文时错位；所有 route 调用与直接 handler 测试同步迁移，并补 direct upstream route guard 锁住 adapter/raw model/format tag 传递（`src/routes/shared/proxy-handler.ts`、`src/routes/chat.ts`、`src/routes/messages.ts`、`src/routes/gemini.ts`、`src/routes/responses.ts`、`tests/unit/routes/upstream-auth-bypass.test.ts`）
 - 更新提示默认不再弹窗：新增 `update.show_update_dialog`（默认 `false`），Dashboard 设置页可手动开启“显示更新弹窗”。Web 自更新弹窗与 Electron 自动更新的系统对话框都受该开关控制；更新检查和托盘/菜单入口仍保留，避免默认后台检查打断使用
 - `src/routes/api-keys.ts` 简化第三方 API key 绑定路由：合并 add/import 的重复 Zod schema，统一 JSON 解析与校验错误返回，复用按 `models` 展开写入的逻辑，并新增 `tests/unit/routes/api-keys.test.ts` 覆盖添加、导入、导出、custom provider 校验与批量删除，确保行为不变
 - README / README_EN 的 Codex CLI + Codex Desktop 两节示例从 `env_key = "PROXY_API_KEY"` 改成 `[model_providers.proxy_codex.http_headers]` 内嵌 `Authorization = "Bearer ..."`：原写法在 GUI 客户端启动时会因为 macOS / Windows GUI 进程不继承 shell rc 的环境变量而报 `Missing environment variable: PROXY_API_KEY`，普通用户得额外学 `launchctl setenv` 或 LaunchAgent 才能让 Codex Desktop 看到环境变量；http_headers 把 key 直接写在 config 文件里，重启 Codex 即用。`env_key` 写法作为「需要密钥从配置文件解耦」（多人共享 / 仓库提交）场景的备选保留在文档说明里
@@ -116,7 +113,6 @@
 
 ### Fixed
 
-- 多后端流量的 cache 命中率被低估到 0%：`OpenAI` / `Anthropic` / `Gemini` 上游适配器在合成 `response.completed` 时全都硬编码 `input_tokens_details: {}`,丢掉了上游原本返回的缓存字段。`openai-upstream.ts` 现在抽 `usage.prompt_tokens_details.cached_tokens`,`anthropic-upstream.ts` 抽 `message_start.usage.cache_read_input_tokens`(也兜底从 `message_delta.usage` 读),`gemini-upstream.ts` 抽 `usageMetadata.cachedContentTokenCount`。修复后 `/admin/usage-stats/summary` 的 `total_cached_tokens` 在多后端模式下不再常驻 0,Dashboard 缓存命中率卡片可以正常工作
 - Dashboard 缓存命中率显示精度自适应:`formatHitRate` 在 < 1% 时切两位小数(`0.02%`),< 0.01% 显 `<0.01%`,= 0 显 `0%` —— 以前 `pct.toFixed(1)` 把 < 0.05% 全压成 "0.0%",看不到真实值
 - 上游返回 `previous_response_not_found`(response 由别的账号创建 / `SessionAffinityMap` 过期或重启丢失 / 跨账号轮转)时端到端恢复:
   - `ws-transport.ts:36` `ROTATABLE_ERROR_CODES` 增补 `previous_response_not_found: 400`，让 WS 首帧 in-stream error 转成 `CodexApiError` reject —— 之前因为不在白名单里直接被流式透传到客户端，绕过了 catch
@@ -127,7 +123,6 @@
 - `release.yml` 的 `Pack` 步骤强制 `shell: bash`，让 Windows runner（默认 pwsh）正确解析 bash 多行续行符 `\` (#414)
 - WebSocket 路径首帧若为上游 `usage_limit_reached` / `rate_limit*` / `quota_exhausted` / 鉴权类终止错误，转换为 `CodexApiError` 抛出，复用 HTTP 路径已有的账号轮转逻辑；恢复 2.0.62 的"智能切换"行为（`src/proxy/ws-transport.ts`）。错误若发生在已有内容流出之后，仍按当前行为透传给客户端
 - 无可用账号时不再执行无意义的重试，直接返回描述性错误信息（含各状态账号计数：rate-limited / expired / banned / disabled）(#362)
-- API Key 路由（OpenAI/Anthropic/Gemini）上游返回错误时，透传原始 JSON 响应体，而非包装为代理自有格式；Codex 账号路由仍使用代理格式 (#367)
 
 - `least_used` 策略不再将 `window_reset_at = null` 的新账号（从未收到限速响应头）视为 Infinity 而永久排在已有窗口账号之后；现在两者都进入 `request_count` 比较，新账号（0 请求）可正确轮转到，`__cf_bm` cookie 也能正常写入 (#342)
 
@@ -147,7 +142,6 @@
 
 ### Added
 
-- 第三方 API Key 管理：支持 Anthropic / OpenAI / Gemini / OpenRouter 预设模型 + 自定义 provider，每个 key 绑定一个具体模型，运行时动态路由（优先于 config 固定 key），LRU 轮转多 key 负载均衡
   - REST API：`GET/POST /auth/api-keys`、`GET /auth/api-keys/catalog`、`POST /auth/api-keys/import`、`GET /auth/api-keys/export`、批量删除、label/status 管理
   - Dashboard 新增 API Keys tab：表单添加（御三家下拉选模型 / custom 手填）、import/export、toggle 启停、删除
   - 持久化 `data/api-keys.json`，UpstreamRouter 优先级 0 匹配 pool entry
@@ -374,10 +368,8 @@
 - 双窗口配额显示：Dashboard 账号卡片同时展示主窗口（小时限制）和次窗口（周限制）的用量百分比、进度条和重置时间，后端 `secondary_window` 不再被忽略
 - 更新弹窗 + 自动重启：点击"有可用更新"弹出 Modal 显示 changelog，一键更新后服务器自动重启、前端自动刷新，零人工干预（git 模式 spawn 新进程、Docker/Electron 显示对应操作指引）
 - Model-aware 多计划账号路由：不同 plan（free/plus/business）的账号自动路由到各自支持的模型，business 账号可继续使用 gpt-5.4 等高端模型 (#57)
-- Structured Outputs 支持：`/v1/chat/completions` 支持 `response_format`（`json_object` / `json_schema`），Gemini 端点支持 `responseMimeType` + `responseSchema`，自动翻译为 Codex Responses API 的 `text.format`；`/v1/responses` 直通 `text` 字段
 
 - 模型列表自动同步：后端动态 fetch 成功后自动回写 `config/models.yaml`，静态配置不再滞后；前端每 60s 轮询模型列表，新模型无需刷新页面即可选择
-- Tuple Schema 支持：`prefixItems`（JSON Schema 2020-12 tuple）自动转换为等价 object schema 发给上游，响应侧还原为数组；OpenAI / Gemini / Responses 三端点统一支持
 - WebSocket 传输 + `previous_response_id` 多轮支持：`/v1/responses` 端点自动通过 WebSocket 连接上游，服务端持久化 response，客户端可通过 `previous_response_id` 引用前轮对话实现增量多轮；WebSocket 失败自动降级回 HTTP SSE (#83)
 - 账号批量导入导出：Dashboard 支持导出全部账号到 JSON 文件（含 token，用于备份/迁移），支持从 JSON 文件批量导入账号，自动去重 (#82)
 
@@ -413,14 +405,12 @@
 - 429 真实冷却时间：从 429 错误响应体解析 `resets_in_seconds` / `resets_at`，账号按后端实际冷却期（如 free 计划 5.5 天）标记限速，不再使用硬编码 60s 默认值 (#65)
 - 429 自动降级：收到 429 后自动尝试下一个可用账号，所有账号耗尽后才返回 429 给客户端 (#65)
 - 调度优先级优化：`least_used` 策略新增 `window_reset_at` 二级排序，配额窗口更早重置的账号优先使用 (#65)
-- JSON Schema `additionalProperties` 递归注入：`injectAdditionalProperties()` 递归注入 `additionalProperties: false` 到 JSON Schema 所有 object 节点，覆盖 `properties`、`patternProperties`、`$defs`/`definitions`、`items`、`prefixItems`、组合器（`oneOf`/`anyOf`/`allOf`）、条件（`if`/`then`/`else`），含循环检测；三个端点（OpenAI/Gemini/Responses passthrough）统一调用 (#64)
 - CONNECT tunnel header 解析：循环跳过中间 header block（CONNECT 200、100 Continue），修复代理模式下 tunnel 的 `HTTP/1.1 200` 被当作真实状态码导致上游 4xx 错误被掩盖为 502 的问题 (#64)
 - 上游 HTTP 状态码透传：非流式 collect 路径从错误消息提取真实 HTTP 状态码，不再硬编码 502；提取 `toErrorStatus()` 辅助函数统一 4 处 StatusCode 转换 (#64)
 - Dashboard 中英文切换按钮宽度跳变：`StableText` 的 `reference` 从英文硬编码改为 `t()` 动态取值，按钮宽度跟随当前语言自适应
 - Dashboard "指纹更新中..." 按钮竖排显示：更新状态按钮添加 `whitespace-nowrap`，防止 CJK 字符逐字换行
 - CI 版本跳号（v1.0.28 → v1.0.30）：`sync-electron.yml` 的 `cancel-in-progress` 改为 `false`，避免 workflow 被取消后 tag 已推送但版本号未同步回 master；合并两次 `git push` 为一次减少部分推送窗口
 - 混合 plan 账号路由失败：free 和 team/plus 账号混用时，请求 plan 受限模型（如 `gpt-5.4`）可能 fallback 到不兼容的 free 账号导致 400 错误，现在严格按 plan 过滤，无匹配账号时返回明确错误而非降级 (#54)
-- `cached_tokens` / `reasoning_tokens` 透传：从 Codex API 响应的 `input_tokens_details` 和 `output_tokens_details` 中提取，传递到 OpenAI（`prompt_tokens_details`）、Anthropic（`cache_read_input_tokens`）、Gemini（`cachedContentTokenCount`）三种格式，覆盖流式和非流式模式 (#55, #58)
 - Dashboard 模型选择器使用后端 catalog 的 `isDefault` 字段，替代硬编码 `gpt-5.4`
 - Docker 端口修复：锁定容器内 `PORT=8080`（`environment` 覆盖 `env_file`），HEALTHCHECK 固定检查 8080，`.env` 的 PORT 仅控制宿主机暴露端口，修复自定义 PORT 时健康检查失败和端口映射不匹配的问题 (#40)
 - Docker Compose 暴露 OAuth 回调端口 1455，修复容器内登录时 "Operation timed out" 的问题
@@ -472,7 +462,6 @@
 - 泛化模型识别：`isCodexCompatibleId()` 同时匹配 `gpt-X.Y-codex-*` 和裸 `gpt-X.Y` 格式，确保新模型命名规范变化时自动接入
 - 代码示例动态 reasoning_effort：CodeExamples 组件根据选中的推理等级自动插入 `reasoning_effort` 参数
 - Reasoning/Thinking 输出支持：始终向 Codex API 发送 `summary: "auto"` 以获取推理摘要事件；OpenAI 路由在客户端发送 `reasoning_effort` 时以 `reasoning_content` 输出；Anthropic 路由在客户端发送 `thinking.type: enabled/adaptive` 时以 thinking block 输出；未知 SSE 事件记录到 debug 日志以便发现新事件类型
-- 图片输入支持：OpenAI、Anthropic、Gemini 三种格式的图片内容现在可以正确透传到 Codex 后端（`input_image` + data URI），此前图片被静默丢弃
 - 每窗口使用量计数器：Dashboard 主显示当前窗口内的请求数和 Token 用量，累计总量降为次要灰色小字；窗口过期时自动归零（时间驱动，零 API 开销），后端同步作为双保险校正
 - 窗口时长显示：从后端同步 `limit_window_seconds`，AccountCard header 显示窗口时长 badge（如 `3h`），重置时间行追加窗口时长文字
 - Dashboard 账号列表新增手动刷新按钮：点击重新拉取额度数据，刷新中按钮旋转并禁用；独立 `refreshing` 状态确保刷新时列表不清空；标题行右侧显示"更新于 HH:MM:SS"时间戳（桌面端可见）
@@ -500,7 +489,6 @@
 
 - Anthropic 路由 `thinking`/`redacted_thinking` content block 验证失败：Claude Code `/compact` 发送含 extended thinking 的对话历史时触发 400 Zod 错误，现已添加到 schema
 - Anthropic 路由上下文 token 始终显示 0%：`message_delta` 事件缺少 `input_tokens`，Claude Code 无法计算上下文占比，现在从 `response.completed` 提取后一并返回
-- 工具 schema 缺少 `properties` 字段导致 400 错误：MCP 工具发送 `{"type":"object"}` 无 `properties` 时，Codex 后端拒绝请求；现在所有格式转换器（OpenAI/Anthropic/Gemini）统一注入 `properties: {}`（PR #22）
 - 额度窗口刷新后 Dashboard 仍显示累计 Token：本地计数器从未按窗口重置，现在 `refreshStatus()` 每次 acquire/getAccounts 时检查 `window_reset_at`，过期自动归零窗口计数器
 - 空响应重试循环中账号双重释放：外层 catch 使用原始 `entryId` 而非当前活跃账号，导致换号重试失败时 double-release（`proxy-handler.ts`）
 - `apply-update.ts` 模型比较不再误报删除：静态提取只含 2 个硬编码模型，与 YAML 的 24 个比较会产生 22 个假删除，现在只报新增
@@ -568,7 +556,6 @@
 
 - Docker 构建完整修复链（代理配置、BuildKit 冲突、host 网络、源码复制顺序、layer 优化）
 - `.env` 行内注释被误解析为 JWT token
-- Anthropic / Gemini 代码示例跟随所选模型
 - `proxy_api_key` 配置未在前端和认证验证中使用
 - 删除按钮始终可见，不被状态徽章遮挡
 
@@ -587,7 +574,6 @@
 ### Changed
 
 - Dashboard 重写为 Tailwind CSS
-- 协议 / 语言两级标签页（OpenAI / Anthropic / Gemini × Python / cURL / Node.js）
 - 内联 SVG 图标替换字体图标
 - 系统字体替换 Google Fonts
 - 架构审计修复（P0-P2 稳定性与可靠性）
@@ -597,7 +583,6 @@
 - 移除所有 `any` 类型
 - 修复图标文字闪烁（FOUC）
 - 修复未认证时的重定向循环
-- 移除虚假的 Claude / Gemini 模型别名，使用动态目录
 - Dashboard 配置改为只读，修复 HTTP 复制按钮
 - 恢复模型下拉选择器
 
@@ -606,7 +591,6 @@
 ### Added
 
 - Anthropic Messages API 兼容路由（`POST /v1/messages`）
-- Google Gemini API 兼容路由
 - 桌面端上下文注入（模拟 Codex Desktop 请求特征）
 - 多轮对话会话管理
 - 自动更新检查管道（Appcast 轮询 + 版本提取）

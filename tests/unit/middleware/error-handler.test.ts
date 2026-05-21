@@ -148,44 +148,6 @@ describe("errorHandler — Anthropic format (/v1/messages)", () => {
   });
 });
 
-// ── Gemini-format errors ─────────────────────────────────────────
-
-describe("errorHandler — Gemini format (/v1beta/)", () => {
-  it("returns Gemini error shape for /v1beta/ routes", async () => {
-    const app = createApp(() => { throw new Error("something broke"); });
-    const res = await app.request("/v1beta/test");
-    expect(res.status).toBe(500);
-    const body = await res.json();
-    expect(body.error.code).toBe(500);
-    expect(body.error.status).toBe("INTERNAL");
-    expect(body.error.message).toBe("something broke");
-  });
-
-  it("maps 429 to RESOURCE_EXHAUSTED for Gemini", async () => {
-    const app = createApp(() => {
-      const err = new Error("rate limited") as Error & { status: number };
-      err.status = 429;
-      throw err;
-    });
-    const res = await app.request("/v1beta/test");
-    expect(res.status).toBe(429);
-    const body = await res.json();
-    expect(body.error.status).toBe("RESOURCE_EXHAUSTED");
-  });
-
-  it("maps 401 to UNAUTHENTICATED for Gemini", async () => {
-    const app = createApp(() => {
-      const err = new Error("bad key") as Error & { status: number };
-      err.status = 401;
-      throw err;
-    });
-    const res = await app.request("/v1beta/test");
-    expect(res.status).toBe(401);
-    const body = await res.json();
-    expect(body.error.status).toBe("UNAUTHENTICATED");
-  });
-});
-
 // ── Passthrough ──────────────────────────────────────────────────
 
 describe("errorHandler — passthrough", () => {

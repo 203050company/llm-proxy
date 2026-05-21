@@ -1,7 +1,7 @@
 /**
  * Integration tests for token usage passthrough across all three output formats.
  * Verifies that cached_tokens and reasoning_tokens are correctly propagated
- * from Codex events through OpenAI, Anthropic, and Gemini translations.
+ * from Codex events through OpenAI and Anthropic translations.
  */
 
 import { vi, describe, it, expect } from "vitest";
@@ -25,7 +25,6 @@ vi.mock("@src/translation/codex-event-extractor.js", async (importOriginal) => {
 
 import { collectCodexResponse, streamCodexToOpenAI } from "@src/translation/codex-to-openai.js";
 import { collectCodexToAnthropicResponse } from "@src/translation/codex-to-anthropic.js";
-import { collectCodexToGeminiResponse } from "@src/translation/codex-to-gemini.js";
 import type { CodexApi } from "@src/proxy/codex-api.js";
 import type { ChatCompletionChunk } from "@src/types/openai.js";
 
@@ -115,21 +114,6 @@ describe("usage passthrough", () => {
       expect(response.usage.input_tokens).toBe(100);
       expect(response.usage.output_tokens).toBe(50);
       expect(response.usage.cache_read_input_tokens).toBe(30);
-    });
-  });
-
-  describe("Gemini format", () => {
-    it("cachedContentTokenCount from cached_tokens", async () => {
-      mockEvents = createUsageEvents({ cached_tokens: 30 });
-      const { response } = await collectCodexToGeminiResponse(
-        fakeCodexApi, fakeResponse, "gpt-5.3-codex",
-      );
-
-      expect(response.usageMetadata).toBeDefined();
-      expect(response.usageMetadata!.promptTokenCount).toBe(100);
-      expect(response.usageMetadata!.candidatesTokenCount).toBe(50);
-      expect(response.usageMetadata!.totalTokenCount).toBe(150);
-      expect(response.usageMetadata!.cachedContentTokenCount).toBe(30);
     });
   });
 

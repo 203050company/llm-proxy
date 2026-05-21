@@ -4,6 +4,7 @@ import type { ComponentChildren } from "preact";
 import { I18nProvider } from "../../shared/i18n/context";
 import { ThemeProvider } from "../../shared/theme/context";
 import { Header } from "./components/Header";
+import { Footer } from "./components/Footer";
 import { UpdateModal } from "./components/UpdateModal";
 import { AddAccount } from "./components/AddAccount";
 import { AccountList } from "./components/AccountList";

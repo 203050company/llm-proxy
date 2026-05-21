@@ -79,7 +79,6 @@ import { AccountPool } from "@src/auth/account-pool.js";
 import { loadStaticModels } from "@src/models/model-store.js";
 import { createChatRoutes } from "@src/routes/chat.js";
 import { createMessagesRoutes } from "@src/routes/messages.js";
-import { createGeminiRoutes } from "@src/routes/gemini.js";
 import { createResponsesRoutes } from "@src/routes/responses.js";
 
 function createSentinelAdapter(tag: string): UpstreamAdapter {
@@ -183,20 +182,6 @@ describe("upstream direct routing without Codex auth", () => {
         input: [{ role: "user", content: "hello" }],
       },
     },
-    {
-      name: "gemini",
-      formatTag: "Gemini",
-      model: "gemini-2.5-pro",
-      makeApp: (pool: AccountPool, adapter: UpstreamAdapter) =>
-        createGeminiRoutes(pool, undefined, undefined, {
-          resolveMatch: vi.fn(() => ({ kind: "adapter", adapter })),
-        } as never),
-      path: "/v1beta/models/gemini-2.5-pro:generateContent",
-      headers: { "Content-Type": "application/json" },
-      body: {
-        contents: [{ role: "user", parts: [{ text: "hello" }] }],
-      },
-    },
   ])("passes $name direct routes to handleDirectRequest with named options", async (testCase) => {
     const pool = new AccountPool();
     const adapter = createSentinelAdapter(`sentinel-${testCase.name}`);
@@ -293,25 +278,6 @@ describe("upstream direct routing without Codex auth", () => {
       },
     ]);
     expect(directReq.codexRequest.tool_choice).toEqual({ type: "function", name: "WebSearch" });
-    pool.destroy();
-  });
-
-  it("allows Gemini direct upstream routing without local accounts", async () => {
-    const pool = new AccountPool();
-    const app = createGeminiRoutes(pool, undefined, undefined, {
-      resolveMatch: vi.fn(() => ({ kind: "adapter", adapter: { tag: "custom-upstream" } })),
-    } as never);
-
-    const res = await app.request("/v1beta/models/gemini-2.5-pro:generateContent", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: "hello" }] }],
-      }),
-    });
-
-    expect(res.status).toBe(200);
-    expect(mockHandleDirectRequest).toHaveBeenCalledTimes(1);
     pool.destroy();
   });
 

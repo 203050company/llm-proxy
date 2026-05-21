@@ -243,4 +243,16 @@ describe("POST /admin/general-settings", () => {
     expect(res.status).toBe(200);
     expect(mockLogStore.setState).toHaveBeenCalledWith({ enabled: true });
   });
+
+  it("syncs log store capacity when logs_capacity changes", async () => {
+    const app = makeApp();
+    const res = await app.request("/admin/general-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ logs_capacity: 1234 }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockLogStore.setState).toHaveBeenCalledWith({ capacity: 1234 });
+  });
 });

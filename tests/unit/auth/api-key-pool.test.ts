@@ -41,11 +41,9 @@ describe("ApiKeyPool", () => {
   it("uses default baseUrl for builtin providers", () => {
     const a = pool.add({ provider: "anthropic", model: "claude-opus-4-6", apiKey: "k1" });
     const o = pool.add({ provider: "openai", model: "gpt-5.4", apiKey: "k2" });
-    const g = pool.add({ provider: "gemini", model: "gemini-3.1-pro-preview", apiKey: "k3" });
 
     expect(a.baseUrl).toBe("https://api.anthropic.com/v1");
     expect(o.baseUrl).toBe("https://api.openai.com/v1");
-    expect(g.baseUrl).toBe("https://generativelanguage.googleapis.com/v1beta");
   });
 
   it("uses custom baseUrl when provided", () => {
@@ -157,11 +155,10 @@ describe("ApiKeyPool", () => {
     const result = pool.importMany([
       { provider: "anthropic", model: "claude-opus-4-6", apiKey: "k1" },
       { provider: "openai", model: "gpt-5.4", apiKey: "k2" },
-      { provider: "gemini", model: "gemini-3.1-pro-preview", apiKey: "k3" },
     ]);
-    expect(result.added).toBe(3);
+    expect(result.added).toBe(2);
     expect(result.failed).toBe(0);
-    expect(pool.getAll()).toHaveLength(3);
+    expect(pool.getAll()).toHaveLength(2);
   });
 
   // ── Export ────────────────────────────────────────────────────

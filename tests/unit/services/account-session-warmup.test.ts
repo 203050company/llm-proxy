@@ -34,7 +34,7 @@ vi.mock("@src/proxy/codex-api.js", () => ({
       return next ?? null;
     }
 
-    async warmupSession(): Promise<unknown> {
+    async warmupSession(model?: string): Promise<unknown> {
       warmupStartTimes.push(Date.now());
       const next = warmupQueue.shift();
       if (next instanceof Error) throw next;
@@ -320,9 +320,10 @@ describe("batchWarmupSessions", () => {
       expect.objectContaining({
         id: "acc-1",
         email: "test@example.com",
-        result: "warmed",
+        result: "failed",
         previousStatus: "active",
         durationMs: expect.any(Number),
+        error: "session warmup failed (fallback to query-only)",
       }),
     ]);
     expect(results[0].durationMs).toBeGreaterThanOrEqual(0);

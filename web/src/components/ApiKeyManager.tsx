@@ -13,7 +13,6 @@ import { formatNumber } from "./UsageChart";
 const PROVIDER_OPTIONS: Array<{ value: ApiKeyProvider; label: string }> = [
   { value: "anthropic", label: "Anthropic" },
   { value: "openai", label: "OpenAI" },
-  { value: "gemini", label: "Google Gemini" },
   { value: "openrouter", label: "OpenRouter" },
   { value: "custom", label: "Custom" },
 ];
@@ -289,7 +288,6 @@ function providerBadgeColor(provider: ApiKeyProvider): string {
   switch (provider) {
     case "anthropic": return "bg-warning-container text-warning";
     case "openai": return "bg-success-container text-success";
-    case "gemini": return "bg-info-container text-info";
     case "openrouter": return "bg-avatar-purple-bg text-avatar-purple-text";
     default: return "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400";
   }
@@ -369,7 +367,6 @@ export function ApiKeyManager() {
   const [importResult, setImportResult] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const grouped = useMemo(() => ({
-    gemini: keys.filter((k) => k.provider === "gemini"),
     openai: keys.filter((k) => k.provider === "openai"),
     anthropic: keys.filter((k) => k.provider === "anthropic"),
     openrouter: keys.filter((k) => k.provider === "openrouter"),
@@ -451,11 +448,6 @@ export function ApiKeyManager() {
         </div>
       ) : (
         <div class="flex flex-col gap-4">
-          <KeySection title={t("geminiApiKeys")} entries={grouped.gemini} onDelete={deleteKey} onToggle={toggleStatus}>
-            <p class="text-xs text-slate-500 dark:text-text-dim">
-              {t("geminiApiKeysSeparateHint")}
-            </p>
-          </KeySection>
           <KeySection title={t("openaiApiKeys")} entries={grouped.openai} onDelete={deleteKey} onToggle={toggleStatus} />
           <KeySection title={t("anthropicApiKeys")} entries={grouped.anthropic} onDelete={deleteKey} onToggle={toggleStatus} />
           <KeySection title={t("openrouterApiKeys")} entries={grouped.openrouter} onDelete={deleteKey} onToggle={toggleStatus} />

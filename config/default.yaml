@@ -24,33 +24,6 @@ auth:
   oauth_client_id: app_EMoamEEZ73f0CkXaXp7hrann
   oauth_auth_endpoint: https://auth.openai.com/oauth/authorize
   oauth_token_endpoint: https://auth.openai.com/oauth/token
-gemini:
-  oauth_enabled: true
-  oauth_client_id: ""
-  oauth_client_secret: null
-  oauth_auth_endpoint: https://accounts.google.com/o/oauth2/v2/auth
-  oauth_token_endpoint: https://oauth2.googleapis.com/token
-  oauth_userinfo_endpoint: https://www.googleapis.com/oauth2/v2/userinfo
-  oauth_callback_host: 127.0.0.1
-  oauth_callback_path: /oauth2callback
-  credentials_path: ~/.gemini/oauth_creds.json
-  code_assist_endpoint: https://cloudcode-pa.googleapis.com
-  code_assist_api_version: v1internal
-  project_id: null
-  refresh_enabled: true
-  refresh_margin_seconds: 300
-  refresh_concurrency: 2
-  api_key_priority: api_key
-  routing:
-    opus: gemini-3.1-pro
-    sonnet: gemini-3-pro
-    haiku: gemini-3.1-flash-lite
-    failover:
-      gemini-3.1-pro:
-        - gemini-3-pro
-        - gemini-3.1-flash-lite
-      gemini-3-pro:
-        - gemini-3.1-flash-lite
 server:
   host: "::"
   port: 8080

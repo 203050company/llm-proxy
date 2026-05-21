@@ -166,6 +166,16 @@ describe("POST /admin/quota-settings", () => {
     expect(res.status).toBe(400);
   });
 
+  it("validates refresh_interval_minutes is an integer", async () => {
+    const app = createWebRoutes(mockPool);
+    const res = await app.request("/admin/quota-settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_interval_minutes: 1.5 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   it("validates thresholds 1-100", async () => {
     const app = createWebRoutes(mockPool);
     const res = await app.request("/admin/quota-settings", {

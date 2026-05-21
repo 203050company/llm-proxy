@@ -419,22 +419,6 @@ describe("translateAnthropicToCodexRequest", () => {
       expect(result.reasoning?.effort).toBe("high");
     });
 
-    it("does not apply configured default reasoning effort to Gemini models", () => {
-      vi.mocked(getConfig).mockReturnValueOnce({
-        model: {
-          default: "gpt-5.3-codex",
-          default_reasoning_effort: "xhigh",
-          default_service_tier: null,
-          suppress_desktop_directives: false,
-        },
-      } as ReturnType<typeof getConfig>);
-
-      const result = translateAnthropicToCodexRequest(
-        makeRequest({ model: "gemini-3.1-pro" }),
-      );
-
-      expect(result.reasoning).toBeUndefined();
-    });
   });
 
   // ── Tools ────────────────────────────────────────────────────────────

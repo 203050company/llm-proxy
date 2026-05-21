@@ -2,7 +2,7 @@
 
   <h1>Codex Proxy</h1>
   <h3>Your Local Codex Coding Assistant Gateway</h3>
-  <p>Expose Codex Desktop's capabilities as standard OpenAI / Anthropic / Gemini APIs, seamlessly connecting any AI client.</p>
+  <p>Expose Codex Desktop's capabilities as standard OpenAI / Anthropic APIs, seamlessly connecting any AI client.</p>
 
   <p>
     <img src="https://img.shields.io/badge/Runtime-Node.js_18+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js">
@@ -44,7 +44,7 @@
 
 ---
 
-**Codex Proxy** is a lightweight local gateway that translates the [Codex Desktop](https://openai.com/codex) Responses API into multiple standard protocol endpoints — OpenAI `/v1/chat/completions`, Anthropic `/v1/messages`, Gemini, Codex `/v1/responses` passthrough, and an optional Ollama-compatible `/api/chat` bridge. Use Codex coding models directly in Cursor, Claude Code, Continue, or any compatible client.
+**Codex Proxy** is a lightweight local gateway that translates the [Codex Desktop](https://openai.com/codex) Responses API into multiple standard protocol endpoints — OpenAI `/v1/chat/completions`, Anthropic `/v1/messages`, Codex `/v1/responses` passthrough, and an optional Ollama-compatible `/api/chat` bridge. Use Codex coding models directly in Cursor, Claude Code, Continue, or any compatible client.
 
 Just a ChatGPT account (or a third-party API key provider) and this proxy — your own personal AI coding assistant gateway, running locally.
 
@@ -110,13 +110,13 @@ If you see streaming AI text, the setup is working. If you get 401, double-check
 ## 🌟 Features
 
 ### 1. 🔌 Full Protocol Compatibility
-- Compatible with `/v1/chat/completions` (OpenAI), `/v1/messages` (Anthropic), Gemini, and `/v1/responses` (Codex passthrough)
+- Compatible with `/v1/chat/completions` (OpenAI), `/v1/messages` (Anthropic), and `/v1/responses` (Codex passthrough)
 - Optional built-in Ollama-compatible bridge, defaulting to `http://127.0.0.1:11434`
 - SSE streaming, works with all OpenAI / Anthropic SDKs and clients
 - Automatic bidirectional translation between all protocols and Codex Responses API
-- **Structured Outputs** — `response_format` (`json_object` / `json_schema`) and Gemini `responseMimeType`
+- **Structured Outputs** — `response_format` (`json_object` / `json_schema`)
 - **Function Calling** — native `function_call` / `tool_calls` across all protocols
-- **Third-party API keys** — supports OpenAI / Anthropic / Gemini / OpenRouter / custom OpenAI-compatible providers, routed by model.
+- **Third-party API keys** — supports OpenAI / Anthropic / OpenRouter / custom OpenAI-compatible providers, routed by model.
 
 ### 2. 🔐 Account Management & Smart Rotation
 - **OAuth PKCE login** — one-click browser auth
@@ -151,7 +151,6 @@ If you see streaming AI text, the setup is working. If you get 401, double-check
 │  POST /v1/chat/completions (OpenAI)                      │
 │  POST /v1/messages         (Anthropic)                   │
 │  POST /v1/responses        (Codex passthrough)           │
-│  POST /gemini/*            (Gemini)                      │
 │       │                                                  │
 │       ▼                                                  │
 │  ┌──────────┐    ┌───────────────┐    ┌──────────────┐   │
@@ -536,8 +535,6 @@ On first startup, if `data/local.yaml` is missing, Codex Proxy creates it with `
 | `/v1/models` | GET | List available models |
 | `/v1/models/catalog` | GET | Full model catalog for the dashboard |
 | `/v1/models/:modelId/info` | GET | Reasoning and metadata for one model |
-| `/v1beta/models` | GET | Gemini-format model list |
-| `/v1beta/models/:modelAction` | POST | Gemini `generateContent` / `streamGenerateContent` |
 | `:11434/api/chat` | POST | Ollama-compatible chat completions (requires Ollama Bridge) |
 
 **Auth & Accounts**

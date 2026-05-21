@@ -113,26 +113,12 @@ vi.mock("@src/translation/codex-to-openai.js", () => ({
   }),
 }));
 
-vi.mock("@src/translation/codex-to-gemini.js", () => ({
-  streamCodexToGemini: vi.fn(),
-  collectCodexToGeminiResponse: vi.fn(async (_api, _resp, _model, _tuple) => {
-    mockState.responseIdCount++;
-    const id = `resp-${mockState.responseIdCount}`;
-    return {
-      response: { candidates: [{ content: { parts: [{ text: "ok" }] } }] },
-      usage: { input_tokens: 10, output_tokens: 5 },
-      responseId: id,
-    };
-  }),
-}));
-
 
 // No mock for session-affinity.js, we test the real implementation.
 
 // ── Imports ─────────────────────────────────────────────────────────
 import { AccountPool } from "@src/auth/account-pool.js";
 import { createChatRoutes } from "@src/routes/chat.js";
-import { createGeminiRoutes } from "@src/routes/gemini.js";
 import { handleProxyRequest, type FormatAdapter } from "@src/routes/shared/proxy-handler.js";
 import { getSessionAffinityMap } from "@src/auth/session-affinity.js";
 
@@ -190,7 +176,6 @@ function createDirectProxyRoutes(pool: AccountPool): Hono {
 describe("Implicit Resume from Derived Key", () => {
   let pool: AccountPool;
   let chatApp: Hono;
-  let geminiApp: Hono;
   let directProxyApp: Hono;
 
   beforeEach(() => {
@@ -202,7 +187,6 @@ describe("Implicit Resume from Derived Key", () => {
     pool = new AccountPool();
     pool.addAccount("test-token-1");
     chatApp = createChatRoutes(pool);
-    geminiApp = createGeminiRoutes(pool);
     directProxyApp = createDirectProxyRoutes(pool);
   });
 
@@ -268,24 +252,6 @@ describe("Implicit Resume from Derived Key", () => {
     // The chainConversationId used for affinity should be the client ID
     const affinityMap = getSessionAffinityMap();
     expect(affinityMap.lookupConversationId("resp-1")).toBe(explicitUserId);
-  });
-
-  it("Test 3: Gemini route extracts session ID from headers", async () => {
-    const req1 = await geminiApp.request("/v1beta/models/gemini-1.5-pro:generateContent", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-session-id": "gemini-test-session-id",
-      },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: "Hello" }] }],
-      }),
-    });
-    expect(req1.status).toBe(200);
-    expect(getCapturedCodexRequest().prompt_cache_key).toBe("gemini-test-session-id");
-
-    const affinityMap = getSessionAffinityMap();
-    expect(affinityMap.lookupConversationId("resp-1")).toBe("gemini-test-session-id");
   });
 
   it("Test 5: variantHash 隔离 — 同 conv 不同 system → implicit resume 不复用主对话的 prev id", async () => {

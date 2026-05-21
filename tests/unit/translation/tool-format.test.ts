@@ -5,12 +5,9 @@ import {
   openAIFunctionsToCodex,
   anthropicToolsToCodex,
   anthropicToolChoiceToCodex,
-  geminiToolsToCodex,
-  geminiToolConfigToCodex,
 } from "@src/translation/tool-format.js";
 import type { ChatCompletionRequest } from "@src/types/openai.js";
 import type { AnthropicMessagesRequest } from "@src/types/anthropic.js";
-import type { GeminiGenerateContentRequest } from "@src/types/gemini.js";
 
 // ── openAIToolsToCodex ──────────────────────────────────────────
 
@@ -266,126 +263,6 @@ describe("anthropicToolChoiceToCodex", () => {
   });
 });
 
-// ── geminiToolsToCodex ──────────────────────────────────────────
-
-describe("geminiToolsToCodex", () => {
-  it("converts function declarations from a single tool group", () => {
-    const result = geminiToolsToCodex([
-      {
-        functionDeclarations: [
-          {
-            name: "search",
-            description: "Search web",
-            parameters: {
-              type: "object",
-              properties: { q: { type: "string" } },
-            },
-          },
-        ],
-      },
-    ]);
-    expect(result).toEqual([
-      {
-        type: "function",
-        name: "search",
-        description: "Search web",
-        parameters: {
-          type: "object",
-          properties: { q: { type: "string" } },
-        },
-      },
-    ]);
-  });
-
-  it("flattens multiple tool groups", () => {
-    const result = geminiToolsToCodex([
-      { functionDeclarations: [{ name: "a" }] },
-      { functionDeclarations: [{ name: "b" }, { name: "c" }] },
-    ]);
-    expect(result).toHaveLength(3);
-    expect(result.map((d) => d.name)).toEqual(["a", "b", "c"]);
-  });
-
-  it("skips tool groups without functionDeclarations", () => {
-    const result = geminiToolsToCodex([
-      {},
-      { functionDeclarations: [{ name: "only" }] },
-    ]);
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe("only");
-  });
-
-  it("returns empty array for tool groups with no declarations", () => {
-    const result = geminiToolsToCodex([{}, {}]);
-    expect(result).toEqual([]);
-  });
-
-  it("normalizes object schema without properties", () => {
-    const result = geminiToolsToCodex([
-      {
-        functionDeclarations: [
-          { name: "fn", parameters: { type: "object" } },
-        ],
-      },
-    ]);
-    expect(result[0].parameters).toEqual({ type: "object", properties: {} });
-  });
-
-  it("omits description and parameters when absent", () => {
-    const result = geminiToolsToCodex([
-      { functionDeclarations: [{ name: "bare_fn" }] },
-    ]);
-    expect(result[0]).not.toHaveProperty("description");
-    expect(result[0]).not.toHaveProperty("parameters");
-  });
-});
-
-// ── geminiToolConfigToCodex ─────────────────────────────────────
-
-describe("geminiToolConfigToCodex", () => {
-  it("returns undefined for falsy config", () => {
-    expect(geminiToolConfigToCodex(undefined)).toBeUndefined();
-  });
-
-  it("returns undefined when functionCallingConfig is missing", () => {
-    expect(geminiToolConfigToCodex({})).toBeUndefined();
-  });
-
-  it("returns undefined when mode is missing", () => {
-    expect(
-      geminiToolConfigToCodex({ functionCallingConfig: {} }),
-    ).toBeUndefined();
-  });
-
-  it('maps AUTO to "auto"', () => {
-    expect(
-      geminiToolConfigToCodex({ functionCallingConfig: { mode: "AUTO" } }),
-    ).toBe("auto");
-  });
-
-  it('maps NONE to "none"', () => {
-    expect(
-      geminiToolConfigToCodex({ functionCallingConfig: { mode: "NONE" } }),
-    ).toBe("none");
-  });
-
-  it('maps ANY to "required"', () => {
-    expect(
-      geminiToolConfigToCodex({ functionCallingConfig: { mode: "ANY" } }),
-    ).toBe("required");
-  });
-
-  it("returns undefined for unknown mode", () => {
-    const result = geminiToolConfigToCodex({
-      functionCallingConfig: {
-        mode: "UNKNOWN" as Parameters<typeof geminiToolConfigToCodex>[0] extends
-          infer C ? C extends { functionCallingConfig: { mode: infer M } } ? M : never : never,
-      },
-    });
-    expect(result).toBeUndefined();
-  });
-});
-
 // ── normalizeSchema additional edge cases ────────────────────────────
 
 describe("normalizeSchema edge cases (via openAIToolsToCodex)", () => {
@@ -438,36 +315,6 @@ describe("normalizeSchema edge cases (via openAIToolsToCodex)", () => {
       },
     ]);
     expect(result[0].parameters).toEqual({ type: "number" });
-  });
-});
-
-// ── geminiToolsToCodex additional edge cases ──────────────────────────
-
-describe("geminiToolsToCodex additional edge cases", () => {
-  it("handles empty functionDeclarations array", () => {
-    const result = geminiToolsToCodex([{ functionDeclarations: [] }]);
-    expect(result).toEqual([]);
-  });
-
-  it("preserves description across multiple tool groups", () => {
-    const result = geminiToolsToCodex([
-      { functionDeclarations: [{ name: "a", description: "Tool A" }] },
-      { functionDeclarations: [{ name: "b", description: "Tool B" }] },
-    ]);
-    expect(result).toHaveLength(2);
-    expect(result[0].description).toBe("Tool A");
-    expect(result[1].description).toBe("Tool B");
-  });
-
-  it("handles mixed groups — some with declarations, some without", () => {
-    const result = geminiToolsToCodex([
-      {},
-      { functionDeclarations: [{ name: "x" }] },
-      { functionDeclarations: [] },
-      { functionDeclarations: [{ name: "y" }, { name: "z" }] },
-    ]);
-    expect(result).toHaveLength(3);
-    expect(result.map((d) => d.name)).toEqual(["x", "y", "z"]);
   });
 });
 
@@ -802,26 +649,4 @@ describe("hosted web_search tool conversion", () => {
     ]);
   });
 
-  it("converts Gemini googleSearch to Codex hosted web_search", () => {
-    const tools = [
-      {
-        googleSearch: {},
-        functionDeclarations: [
-          {
-            name: "lookup",
-            parameters: { type: "object" },
-          },
-        ],
-      },
-    ] satisfies NonNullable<GeminiGenerateContentRequest["tools"]>;
-
-    expect(geminiToolsToCodex(tools)).toEqual([
-      { type: "web_search" },
-      {
-        type: "function",
-        name: "lookup",
-        parameters: { type: "object", properties: {} },
-      },
-    ]);
-  });
 });

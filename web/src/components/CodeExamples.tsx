@@ -2,13 +2,12 @@ import { useState, useMemo, useCallback } from "preact/hooks";
 import { useT } from "../../../shared/i18n/context";
 import { CopyButton } from "./CopyButton";
 
-type Protocol = "openai" | "anthropic" | "gemini";
+type Protocol = "openai" | "anthropic";
 type CodeLang = "python" | "node" | "curl";
 
 const protocols: { id: Protocol; label: string }[] = [
   { id: "openai", label: "OpenAI" },
   { id: "anthropic", label: "Anthropic" },
-  { id: "gemini", label: "Gemini" },
 ];
 
 const langs: { id: CodeLang; label: string }[] = [
@@ -22,7 +21,7 @@ function buildExamples(
   apiKey: string,
   model: string,
   origin: string,
-  reasoningEffort: string
+  reasoningEffort: string,
 ): Record<string, string> {
   const effortLine = reasoningEffort && reasoningEffort !== "medium"
     ? `\n    reasoning_effort="${reasoningEffort}",`
@@ -108,38 +107,6 @@ const message = await client.messages.create({
     messages: [{ role: "user", content: "Hello" }],
 });
 console.log(message.content[0].text);`,
-
-    "gemini-python": `from google import genai
-
-client = genai.Client(
-    api_key="${apiKey}",
-    http_options={"base_url": "${origin}/v1beta"},
-)
-
-response = client.models.generate_content(
-    model="${model}",
-    contents="Hello",
-)
-print(response.text)`,
-
-    "gemini-curl": `curl "${origin}/v1beta/models/${model}:generateContent?key=${apiKey}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "contents": [{"role": "user", "parts": [{"text": "Hello"}]}]
-  }'`,
-
-    "gemini-node": `import { GoogleGenAI } from "@google/genai";
-
-const ai = new GoogleGenAI({
-    apiKey: "${apiKey}",
-    httpOptions: { baseUrl: "${origin}/v1beta" },
-});
-
-const response = await ai.models.generateContent({
-    model: "${model}",
-    contents: "Hello",
-});
-console.log(response.text);`,
   };
 }
 
@@ -158,7 +125,6 @@ export function CodeExamples({ baseUrl, apiKey, model, reasoningEffort, serviceT
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-  // Build compound model name with suffixes for CLI users
   const displayModel = useMemo(() => {
     let name = model;
     if (reasoningEffort && reasoningEffort !== "medium") name += `-${reasoningEffort}`;
@@ -166,11 +132,10 @@ export function CodeExamples({ baseUrl, apiKey, model, reasoningEffort, serviceT
     return name;
   }, [model, reasoningEffort, serviceTier]);
 
-  // When effort/speed are embedded as suffixes, don't also show separate reasoning_effort param
   const explicitEffort = displayModel === model ? reasoningEffort : "medium";
   const examples = useMemo(
     () => buildExamples(baseUrl, apiKey, displayModel, origin, explicitEffort),
-    [baseUrl, apiKey, displayModel, origin, explicitEffort]
+    [baseUrl, apiKey, displayModel, origin, explicitEffort],
   );
 
   const currentCode = examples[`${protocol}-${codeLang}`] || t("loading");
@@ -189,7 +154,6 @@ export function CodeExamples({ baseUrl, apiKey, model, reasoningEffort, serviceT
     <section class="flex flex-col gap-4">
       <h2 class="text-[0.95rem] font-bold">{t("integrationExamples")}</h2>
       <div class="bg-white dark:bg-card-dark border border-gray-200 dark:border-border-dark rounded-xl overflow-hidden shadow-sm transition-colors">
-        {/* Protocol Tabs */}
         <div class="flex border-b border-gray-200 dark:border-border-dark bg-slate-50/50 dark:bg-[#0d1117]">
           {protocols.map((p) => (
             <button
@@ -201,7 +165,6 @@ export function CodeExamples({ baseUrl, apiKey, model, reasoningEffort, serviceT
             </button>
           ))}
         </div>
-        {/* Language Tabs & Code */}
         <div class="p-5">
           <div class="flex items-center justify-between mb-4">
             <div class="flex gap-2 p-1 bg-slate-100 dark:bg-bg-dark dark:border dark:border-border-dark rounded-lg">
@@ -216,7 +179,6 @@ export function CodeExamples({ baseUrl, apiKey, model, reasoningEffort, serviceT
               ))}
             </div>
           </div>
-          {/* Code Block */}
           <div class="relative group rounded-lg overflow-hidden bg-slate-50 dark:bg-[#0d1117] text-slate-800 dark:text-slate-300 font-mono text-xs border border-slate-200 dark:border-border-dark">
             <div class="absolute right-2 top-2 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
               <CopyButton getText={getCode} variant="label" />

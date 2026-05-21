@@ -10,4 +10,11 @@ describe("dashboard update modal", () => {
 
     expect(source).not.toMatch(/useEffect\(\(\) => \{[\s\S]*setShowModal\(true\)[\s\S]*update\.hasUpdate/);
   });
+
+  it("imports the footer component before rendering it", () => {
+    const source = readFileSync(appSourcePath, "utf-8");
+
+    expect(source).toContain('import { Footer } from "./components/Footer";');
+    expect(source).toContain("<Footer updateStatus={update.status} />");
+  });
 });

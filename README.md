@@ -2,7 +2,7 @@
 
   <h1>Codex Proxy</h1>
   <h3>您的本地 Codex 编程助手中转站</h3>
-  <p>将 Codex Desktop 的能力以 OpenAI / Anthropic / Gemini 标准协议对外暴露，无缝接入任意 AI 客户端。</p>
+  <p>将 Codex Desktop 的能力以 OpenAI / Anthropic 标准协议对外暴露，无缝接入任意 AI 客户端。</p>
 
   <p>
     <img src="https://img.shields.io/badge/Runtime-Node.js_18+-339933?style=flat-square&logo=nodedotjs&logoColor=white" alt="Node.js">
@@ -63,7 +63,7 @@
 
 ---
 
-**Codex Proxy** 是一个轻量级本地中转服务，将 [Codex Desktop](https://openai.com/codex) 的 Responses API 转换为多种标准协议接口（OpenAI `/v1/chat/completions`、Anthropic `/v1/messages`、Gemini、Codex `/v1/responses` 直通，以及可选 Ollama `/api/chat` 兼容桥接）。通过本项目，您可以在 Cursor、Claude Code、Continue 等任何兼容上述协议的客户端中直接使用 Codex 编程模型。
+**Codex Proxy** 是一个轻量级本地中转服务，将 [Codex Desktop](https://openai.com/codex) 的 Responses API 转换为多种标准协议接口（OpenAI `/v1/chat/completions`、Anthropic `/v1/messages`、Codex `/v1/responses` 直通，以及可选 Ollama `/api/chat` 兼容桥接）。通过本项目，您可以在 Cursor、Claude Code、Continue 等任何兼容上述协议的客户端中直接使用 Codex 编程模型。
 
 只需一个 ChatGPT 账号（或接入第三方 API 中转站），配合本代理即可在本地搭建一个专属的 AI 编程助手网关。
 
@@ -139,13 +139,13 @@ curl http://localhost:8080/v1/chat/completions \
 ## 🌟 核心功能
 
 ### 🔌 全协议兼容
-- 兼容 `/v1/chat/completions`（OpenAI）、`/v1/messages`（Anthropic）、Gemini 格式及 `/v1/responses`（Codex 直通）
+- 兼容 `/v1/chat/completions`（OpenAI）、`/v1/messages`（Anthropic）及 `/v1/responses`（Codex 直通）
 - 内置可选 Ollama 兼容桥接，默认监听 `http://127.0.0.1:11434`
 - SSE 流式输出，可直接对接所有 OpenAI / Anthropic SDK 和客户端
-- 自动完成 Chat Completions / Anthropic / Gemini ↔ Codex Responses API 双向协议转换
-- **Structured Outputs** — `response_format`（`json_object` / `json_schema`）和 Gemini `responseMimeType`
+- 自动完成 Chat Completions / Anthropic ↔ Codex Responses API 双向协议转换
+- **Structured Outputs** — `response_format`（`json_object` / `json_schema`）
 - **Function Calling** — 原生 `function_call` / `tool_calls` 支持（所有协议）
-- **第三方 API Keys** — 支持 OpenAI / Anthropic / Gemini / OpenRouter / 自定义 OpenAI-compatible Provider，并按模型路由直通上游。
+- **第三方 API Keys** — 支持 OpenAI / Anthropic / OpenRouter / 自定义 OpenAI-compatible Provider，并按模型路由直通上游。
 
 ### 🔐 账号管理与智能轮换
 - **OAuth PKCE 登录** — 浏览器一键授权，无需手动复制 Token
@@ -180,7 +180,6 @@ curl http://localhost:8080/v1/chat/completions \
 │  POST /v1/chat/completions (OpenAI)                      │
 │  POST /v1/messages         (Anthropic)                   │
 │  POST /v1/responses        (Codex 直通)                  │
-│  POST /gemini/*            (Gemini)                      │
 │       │                                                  │
 │       ▼                                                  │
 │  ┌──────────┐    ┌───────────────┐    ┌──────────────┐   │
@@ -686,8 +685,6 @@ curl -N http://localhost:8080/official-agent/threads/{threadId}/turns \
 | `/v1/models` | GET | 可用模型列表 |
 | `/v1/models/catalog` | GET | Dashboard 使用的完整模型目录 |
 | `/v1/models/:modelId/info` | GET | 单个模型的推理等级等详情 |
-| `/v1beta/models` | GET | Gemini 格式模型列表 |
-| `/v1beta/models/:modelAction` | POST | Gemini `generateContent` / `streamGenerateContent` |
 | `:11434/api/chat` | POST | Ollama 兼容聊天补全（需启用 Ollama Bridge） |
 
 **账号与认证**
@@ -822,7 +819,7 @@ curl -X POST http://localhost:8080/auth/accounts/import \
 **Fixed**
 - WebSocket 路径首帧若为上游 `usage_limit_reached` / `rate_limit*` / `quota_exhausted` / 鉴权类终止错误，转换为 `CodexApiError` 抛出，复用 HTTP 路径已有的账号轮转逻辑；恢复 2.0.62 的"智能切换"行为（`src/proxy/ws-transport.ts`）。错误若发生在已有内容流出之后，仍按当前行为透传给客户端
 - 无可用账号时不再执行无意义的重试，直接返回描述性错误信息（含各状态账号计数：rate-limited / expired / banned / disabled）(#362)
-- API Key 路由（OpenAI/Anthropic/Gemini）上游返回错误时，透传原始 JSON 响应体，而非包装为代理自有格式；Codex 账号路由仍使用代理格式 (#367)
+- API Key 路由（OpenAI/Anthropic/OpenRouter/自定义 Provider）上游返回错误时，透传原始 JSON 响应体，而非包装为代理自有格式；Codex 账号路由仍使用代理格式 (#367)
 - `least_used` 策略不再将 `window_reset_at = null` 的新账号（从未收到限速响应头）视为 Infinity 而永久排在已有窗口账号之后；现在两者都进入 `request_count` 比较，新账号（0 请求）可正确轮转到，`__cf_bm` cookie 也能正常写入 (#342)
 - 默认不再发送 `reasoning.effort`：移除 `modelInfo.defaultReasoningEffort` 自动兜底，`default_reasoning_effort` 默认改为 `null`，彻底消除简单对话触发 medium 推理导致的 token 暴涨；Dashboard 新增 "Disabled (no reasoning)" 选项，用户可按需开启
 - ...（[查看全部](./CHANGELOG.md)）

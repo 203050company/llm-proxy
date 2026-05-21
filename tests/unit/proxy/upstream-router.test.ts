@@ -31,14 +31,12 @@ describe("UpstreamRouter", () => {
   const codexAdapter = makeAdapter("codex");
   const openaiAdapter = makeAdapter("openai");
   const anthropicAdapter = makeAdapter("anthropic");
-  const geminiAdapter = makeAdapter("gemini");
   const deepseekAdapter = makeAdapter("deepseek");
 
   const adapters = new Map([
     ["codex", codexAdapter],
     ["openai", openaiAdapter],
     ["anthropic", anthropicAdapter],
-    ["gemini", geminiAdapter],
     ["deepseek", deepseekAdapter],
   ]);
 
@@ -54,10 +52,6 @@ describe("UpstreamRouter", () => {
 
   it("routes explicit prefix anthropic: to anthropic adapter", () => {
     expect(router.resolve("anthropic:claude-3-5-sonnet-20241022").tag).toBe("anthropic");
-  });
-
-  it("routes explicit prefix gemini: to gemini adapter", () => {
-    expect(router.resolve("gemini:gemini-2.0-flash").tag).toBe("gemini");
   });
 
   it("routes model_routing table entries correctly", () => {
@@ -80,11 +74,6 @@ describe("UpstreamRouter", () => {
     expect(router.resolveMatch("claude-opus-4-7").kind).toBe("codex");
     expect(router.resolveMatch("claude-sonnet-4-6").kind).toBe("codex");
     expect(router.resolveMatch("claude-haiku-4-5").kind).toBe("codex");
-  });
-
-  it("auto-routes gemini-* to gemini", () => {
-    expect(router.resolve("gemini-2.0-flash").tag).toBe("gemini");
-    expect(router.resolve("gemini-1.5-pro").tag).toBe("gemini");
   });
 
   it("routes known codex models to codex", () => {

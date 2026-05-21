@@ -1,7 +1,7 @@
 /**
  * Real upstream integration tests — basic format verification.
  *
- * Verifies all 4 API formats (OpenAI, Anthropic, Codex, Gemini) in both
+ * Verifies OpenAI, Anthropic, and Codex API formats in both
  * streaming and non-streaming modes against a running proxy.
  *
  * Run with: npm run test:real
@@ -197,51 +197,3 @@ describe("real: /v1/responses", () => {
   }, TIMEOUT);
 });
 
-// ── /v1beta/models (Gemini format) ───────────────────────────────────
-
-describe("real: Gemini endpoints", () => {
-  it("streamGenerateContent: NDJSON streaming", async () => {
-    if (skip()) return;
-
-    const res = await fetch(`${PROXY_URL}/v1beta/models/codex:streamGenerateContent`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: "Reply with exactly one word: hello" }] }],
-      }),
-      signal: AbortSignal.timeout(TIMEOUT),
-    });
-
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
-
-    const dataLines = await collectSSE(res);
-    expect(dataLines.length).toBeGreaterThanOrEqual(1);
-
-    const first = JSON.parse(dataLines[0]) as Record<string, unknown>;
-    expect(first.candidates).toBeDefined();
-  }, TIMEOUT);
-
-  it("generateContent: JSON response", async () => {
-    if (skip()) return;
-
-    const res = await fetch(`${PROXY_URL}/v1beta/models/codex:generateContent`, {
-      method: "POST",
-      headers: headers(),
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: "Reply with exactly one word: hello" }] }],
-      }),
-      signal: AbortSignal.timeout(TIMEOUT),
-    });
-
-    expect(res.status).toBe(200);
-    const body = await res.json() as Record<string, unknown>;
-    expect(body.candidates).toBeDefined();
-
-    const candidates = body.candidates as Array<Record<string, unknown>>;
-    const content = candidates[0].content as { parts: Array<{ text: string }> };
-    expect(content.parts[0].text.length).toBeGreaterThan(0);
-
-    expect(body.usageMetadata).toBeDefined();
-  }, TIMEOUT);
-});

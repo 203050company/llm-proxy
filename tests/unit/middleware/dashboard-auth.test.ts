@@ -94,12 +94,6 @@ describe("dashboard-auth middleware", () => {
     expect(res.status).toBe(200);
   });
 
-  it("passes through for /v1beta/* API routes", async () => {
-    const app = createApp();
-    const res = await app.request("/v1beta/models");
-    expect(res.status).toBe(200);
-  });
-
   it("passes through for /official-agent/* API routes", async () => {
     const app = createApp();
     const res = await app.request("/official-agent/apps");

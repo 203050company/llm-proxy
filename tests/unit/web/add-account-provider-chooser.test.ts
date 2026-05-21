@@ -12,22 +12,19 @@ const APP_SOURCE = readFileSync(
 );
 
 describe("AddAccount provider chooser", () => {
-  it("shows Codex and Gemini choices before starting OAuth", () => {
+  it("shows only the Codex choice before starting OAuth", () => {
     expect(SOURCE).toContain("onStartCodex");
-    expect(SOURCE).toContain("onStartGemini");
     expect(SOURCE).toContain(">Codex<");
-    expect(SOURCE).toContain(">Gemini<");
+    expect(SOURCE).toContain(">Codex<");
   });
 
-  it("wires the dashboard add dialog to Codex and Gemini account flows", () => {
+  it("wires the dashboard add dialog to the Codex account flow", () => {
     expect(APP_SOURCE).toContain("const [showAdd, setShowAdd]");
     expect(APP_SOURCE).toContain("const [addProvider, setAddProvider]");
-    expect(APP_SOURCE).toContain("visible={showAdd || accounts.addVisible || geminiAccounts.addVisible}");
+    expect(APP_SOURCE).toContain("visible={showAdd || accounts.addVisible}");
     expect(APP_SOURCE).toContain("provider={addProvider}");
     expect(APP_SOURCE).toContain("onChooseProvider={setAddProvider}");
     expect(APP_SOURCE).toContain("onStartCodex={accounts.startAdd}");
-    expect(APP_SOURCE).toContain("onStartGemini={geminiAccounts.startAdd}");
-    expect(APP_SOURCE).toContain("await geminiAccounts.submitRelay(callbackUrl);");
-    expect(APP_SOURCE).toContain("onImportGeminiCli={geminiAccounts.importCli}");
+    expect(APP_SOURCE).toContain("onStartCodex={accounts.startAdd}");
   });
 });

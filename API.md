@@ -44,21 +44,6 @@ Anthropic Messages API compatible.
 - Auth: `x-api-key` or `Authorization: Bearer`
 - Errors: `{ type: "error", error: { type, message } }`
 
-### POST /v1beta/models/:model\:generateContent
-### POST /v1beta/models/:model\:streamGenerateContent
-Google Gemini compatible.
-
-```jsonc
-// Request
-{
-  "contents": [{"role": "user", "parts": [{"text": "Hello"}]}],
-  "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
-  "systemInstruction": {"parts": [{"text": "You are helpful."}]}
-}
-```
-
-- Auth: `x-goog-api-key` header, `key` query param, or Bearer token
-- Errors: `{ error: { code, message, status } }`
 
 ### POST /v1/responses
 Native Codex Responses API passthrough (WebSocket transport).
@@ -210,7 +195,6 @@ Supported request mappings:
 | GET | `/v1/models/catalog` | Full catalog with reasoning efforts |
 | GET | `/v1/models/:id` | Single model detail |
 | GET | `/v1/models/:id/info` | Extended model info |
-| GET | `/v1beta/models` | List models (Gemini format) |
 | POST | `/admin/refresh-models` | Force refresh from upstream |
 
 Model catalog entries can include token metadata:
@@ -454,7 +438,6 @@ Each protocol returns errors in its native format:
 |----------|--------|
 | OpenAI | `{ error: { message, type, code, param } }` |
 | Anthropic | `{ type: "error", error: { type, message } }` |
-| Gemini | `{ error: { code, message, status } }` |
 | Responses | `{ type: "error", error: { type, code, message } }` |
 | Admin | `{ error: "..." }` |
 

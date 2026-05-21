@@ -3,7 +3,7 @@ import type { ProxyEntry } from "../types";
 
 export interface AssignmentAccount {
   id: string;
-  provider?: "codex" | "gemini" | string;
+  provider?: "codex" | string;
   email: string;
   label?: string | null;
   status: string;

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "preact/hooks";
 
-export type ApiKeyProvider = "anthropic" | "openai" | "gemini" | "openrouter" | "custom";
+export type ApiKeyProvider = "anthropic" | "openai" | "openrouter" | "custom";
 
 export interface ApiKeyEntry {
   id: string;

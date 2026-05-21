@@ -432,7 +432,7 @@ describe("CodexApi.createResponse", () => {
     vi.mocked(getTransport).mockReturnValue(mockTransport);
 
     const api = new CodexApi("test-token", "account-1");
-    const rateLimit = await api.warmupSession("gpt-5.4-mini");
+    const rateLimit = await api.warmupSession("gpt-5.4-mini", false);
 
     expect(mockTransport.post).toHaveBeenCalledTimes(1);
     expect(mockTransport.post).toHaveBeenCalledWith(
@@ -513,7 +513,7 @@ describe("CodexApi.createResponse", () => {
     vi.mocked(getTransport).mockReturnValue(mockTransport);
 
     const api = new CodexApi("test-token", "account-1");
-    const warmupPromise = api.warmupSession("gpt-5.4-mini");
+    const warmupPromise = api.warmupSession("gpt-5.4-mini", false);
     const rateLimit = await Promise.race([
       warmupPromise,
       new Promise<typeof timeoutResult>((resolve) => {
@@ -563,7 +563,7 @@ describe("CodexApi.createResponse", () => {
 
     const api = new CodexApi("test-token", "account-1");
 
-    await expect(api.warmupSession("gpt-5.4-mini")).rejects.toMatchObject({
+    await expect(api.warmupSession("gpt-5.4-mini", false)).rejects.toMatchObject({
       status: 429,
       body: errorBody,
     });

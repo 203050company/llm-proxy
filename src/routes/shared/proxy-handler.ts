@@ -449,12 +449,14 @@ export async function handleProxyRequest(options: HandleProxyRequestOptions): Pr
     ? affinityMap.lookupFunctionCallIds(implicitPrevRespId)
     : [];
   // Session affinity: prefer the account that created the previous response
-  const preferredEntryId =
+  const headerPreferredEntryId = c.req.header("x-proxy-preferred-account-id") || c.req.header("X-Proxy-Preferred-Account-Id");
+  const preferredEntryId = headerPreferredEntryId ?? (
     explicitPrevRespId
       ? affinityMap.lookup(explicitPrevRespId)
       : implicitPrevRespId && normalizeInstructions(currentInstructions) === normalizeInstructions(implicitStoredInstructions)
         ? affinityMap.lookup(implicitPrevRespId)
-        : null;
+        : null
+  );
 
   // Conversation ID: honor explicit prompt_cache_key first, otherwise prefer
   // client session IDs (Claude Code), then content hash, then random fallback.

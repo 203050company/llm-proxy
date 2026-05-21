@@ -34,7 +34,7 @@ tests/
 │   │   └── shared/     # Account acquisition, error handler, response processor
 │   ├── services/       # Account import/mutation/query
 │   ├── tls/            # Direct fallback, proxy hostname resolution
-│   ├── translation/    # All codec pairs (openai/anthropic/gemini ↔ codex)
+│   ├── translation/    # All codec pairs (openai/anthropic ↔ codex)
 │   ├── types/          # Zod schema validation
 │   ├── utils/          # Jitter, retry, logger, yaml-mutate
 │   └── web/            # Theme, cache headers, add-account

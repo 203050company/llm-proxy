@@ -127,7 +127,7 @@ describe("SessionAffinityMap", () => {
     map.record("resp_a", "entry_1", "conv_same", undefined, undefined, undefined, undefined, "vh_a");
     map.record("resp_b", "entry_1", "conv_same", undefined, undefined, undefined, undefined, "vh_b");
 
-    // 没传 variantHash → 跨 variant 选最新（兼容 [Responses] / [Chat] / [Gemini] 路径）
+    // 没传 variantHash → 跨 variant 选最新（兼容 [Responses] / [Chat] 路径）
     expect(map.lookupLatestResponseIdByConversationId("conv_same")).toBe("resp_b");
   });
 

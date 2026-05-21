@@ -44,21 +44,6 @@ Anthropic Messages API 兼容接口。
 - 鉴权：`x-api-key` 或 `Authorization: Bearer`
 - 错误格式：`{ type: "error", error: { type, message } }`
 
-### POST /v1beta/models/:model\:generateContent
-### POST /v1beta/models/:model\:streamGenerateContent
-Google Gemini 兼容接口。
-
-```jsonc
-// 请求体
-{
-  "contents": [{"role": "user", "parts": [{"text": "Hello"}]}],
-  "generationConfig": {"temperature": 0.7, "maxOutputTokens": 1024},
-  "systemInstruction": {"parts": [{"text": "你是一个助手。"}]}
-}
-```
-
-- 鉴权：`x-goog-api-key` 请求头、`key` 查询参数、或 Bearer token
-- 错误格式：`{ error: { code, message, status } }`
 
 ### POST /v1/responses
 原生 Codex Responses API 透传（底层走 WebSocket）。
@@ -161,7 +146,6 @@ OpenAI Chat 兼容路径会接受 `tools: [{"type":"image_generation"}]`，但�
 | GET | `/v1/models/catalog` | 完整模型目录（含 reasoning effort） |
 | GET | `/v1/models/:id` | 单个模型详情 |
 | GET | `/v1/models/:id/info` | 扩展模型信息 |
-| GET | `/v1beta/models` | 列出模型（Gemini 格式） |
 | POST | `/admin/refresh-models` | 强制从上游刷新模型列表 |
 
 模型目录条目可以包含 token 元数据：
@@ -398,7 +382,6 @@ secondary / code review 窗口自己的 `reset_at` 过期后会从缓存中清�
 |------|------|
 | OpenAI | `{ error: { message, type, code, param } }` |
 | Anthropic | `{ type: "error", error: { type, message } }` |
-| Gemini | `{ error: { code, message, status } }` |
 | Responses | `{ type: "error", error: { type, code, message } }` |
 | Admin | `{ error: "..." }` |
 

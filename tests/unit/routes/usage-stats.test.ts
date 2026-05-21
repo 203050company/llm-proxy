@@ -13,7 +13,6 @@ import { UsageStatsStore, type UsageStatsPersistence, type UsageSnapshot } from 
 import { createUsageStatsRoutes } from "@src/routes/admin/usage-stats.js";
 import type { AccountPool } from "@src/auth/account-pool.js";
 import type { ApiKeyPool } from "@src/auth/api-key-pool.js";
-import type { GeminiAccountPool } from "@src/auth/gemini-account-pool.js";
 
 function createMockPool(totals: { input_tokens: number; output_tokens: number; request_count: number; cached_tokens?: number }): AccountPool {
   return {
@@ -52,29 +51,6 @@ function createMockApiKeyPool(totals: { model: string; input_tokens: number; out
   } as unknown as ApiKeyPool;
 }
 
-function createMockGeminiPool(totals: { model: string; input_tokens: number; output_tokens: number; request_count: number }): GeminiAccountPool {
-  return {
-    getAll: () => [
-      {
-        id: "gemini-1",
-        status: "active",
-        usage: {
-          input_tokens: totals.input_tokens,
-          output_tokens: totals.output_tokens,
-          request_count: totals.request_count,
-          models: {
-            [totals.model]: {
-              input_tokens: totals.input_tokens,
-              output_tokens: totals.output_tokens,
-              request_count: totals.request_count,
-            },
-          },
-        },
-      },
-    ],
-  } as unknown as GeminiAccountPool;
-}
-
 describe("usage stats routes", () => {
   describe("GET /admin/usage-stats/summary", () => {
     it("returns cumulative totals", async () => {
@@ -106,7 +82,7 @@ describe("usage stats routes", () => {
       expect(body.total_input_tokens).toBe(5000);
     });
 
-    it("includes runtime API key and Gemini OAuth usage", async () => {
+    it("includes runtime API key usage", async () => {
       const pool = createMockPool({ input_tokens: 5000, output_tokens: 1000, request_count: 20 });
       const apiKeyPool = createMockApiKeyPool({
         model: "openrouter/test-model",
@@ -114,24 +90,18 @@ describe("usage stats routes", () => {
         output_tokens: 70,
         request_count: 7,
       });
-      const geminiPool = createMockGeminiPool({
-        model: "gemini-3.1-pro",
-        input_tokens: 300,
-        output_tokens: 30,
-        request_count: 3,
-      });
       const store = createStore();
       const app = new Hono();
-      app.route("/", createUsageStatsRoutes(pool, store, apiKeyPool, geminiPool));
+      app.route("/", createUsageStatsRoutes(pool, store, apiKeyPool));
 
       const res = await app.request("/admin/usage-stats/summary");
       const body = await res.json();
 
-      expect(body.total_input_tokens).toBe(6000);
-      expect(body.total_output_tokens).toBe(1100);
-      expect(body.total_request_count).toBe(30);
-      expect(body.total_accounts).toBe(3);
-      expect(body.active_accounts).toBe(3);
+      expect(body.total_input_tokens).toBe(5700);
+      expect(body.total_output_tokens).toBe(1070);
+      expect(body.total_request_count).toBe(27);
+      expect(body.total_accounts).toBe(2);
+      expect(body.active_accounts).toBe(2);
     });
   });
 

@@ -2,7 +2,7 @@
  * Real upstream tests — error format validation.
  *
  * Verifies that error responses from the proxy conform to each API format's
- * error specification (OpenAI, Anthropic, Gemini, Codex Responses).
+ * error specification (OpenAI, Anthropic, Codex Responses).
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
@@ -132,55 +132,6 @@ describe("real: Anthropic error format", () => {
       expect(typeof error.type).toBe("string");
       expect(typeof error.message).toBe("string");
     }
-  }, TIMEOUT);
-});
-
-// ── Gemini error format ──────────────────────────────────────────────
-
-describe("real: Gemini error format", () => {
-  it("invalid model returns structured Gemini error", async () => {
-    if (skip()) return;
-
-    const res = await fetch(
-      `${PROXY_URL}/v1beta/models/nonexistent-model-xyz:generateContent`,
-      {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: "test" }] }],
-        }),
-        signal: AbortSignal.timeout(TIMEOUT),
-      },
-    );
-
-    expect(res.status).not.toBe(500);
-    const body = await res.json() as Record<string, unknown>;
-
-    if (body.error) {
-      const error = body.error as { code: number; message: string; status: string };
-      expect(typeof error.code).toBe("number");
-      expect(typeof error.message).toBe("string");
-      expect(typeof error.status).toBe("string");
-    }
-  }, TIMEOUT);
-
-  it("empty contents returns error", async () => {
-    if (skip()) return;
-
-    const res = await fetch(
-      `${PROXY_URL}/v1beta/models/codex:generateContent`,
-      {
-        method: "POST",
-        headers: headers(),
-        body: JSON.stringify({
-          contents: [],
-        }),
-        signal: AbortSignal.timeout(TIMEOUT),
-      },
-    );
-
-    // Should be 400 or upstream error, not 500
-    expect(res.status).not.toBe(500);
   }, TIMEOUT);
 });
 

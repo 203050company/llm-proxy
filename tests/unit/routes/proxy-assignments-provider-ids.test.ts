@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createProxyRoutes } from "@src/routes/proxies.js";
 import { AccountPool } from "@src/auth/account-pool.js";
-import { GeminiAccountPool } from "@src/auth/gemini-account-pool.js";
-import type { GeminiAccountEntry } from "@src/auth/gemini-types.js";
 import type { ProxyPool } from "@src/proxy/proxy-pool.js";
 import { createMemoryPersistence } from "@helpers/account-pool-factory.js";
 import { createValidJwt } from "@helpers/jwt.js";
@@ -28,45 +26,13 @@ function codexEntry(): AccountEntry {
   };
 }
 
-function geminiEntry(): GeminiAccountEntry {
-  return {
-    id: "gem-1",
-    email: "gemini@example.com",
-    label: null,
-    status: "active",
-    accessToken: "access",
-    refreshToken: "refresh",
-    idToken: null,
-    scope: "openid",
-    tokenType: "Bearer",
-    expiresAt: null,
-    projectId: null,
-    userTier: null,
-    userTierName: null,
-    paidTier: null,
-    googleAiSubscription: null,
-    quota: null,
-    quotaFetchedAt: null,
-    lastUsedAt: null,
-    lastRefreshSuccessAt: null,
-    lastRefreshFailureAt: null,
-    lastRefreshFailureCode: null,
-    usage: { input_tokens: 0, output_tokens: 0, request_count: 0, models: {} },
-    models: ["gemini-3.1-pro"],
-  };
-}
-
 describe("proxy assignments provider IDs", () => {
-  it("returns namespaced Codex and Gemini accounts for proxy assignment", async () => {
+  it("returns namespaced Codex accounts for proxy assignment", async () => {
     const accountPool = new AccountPool({
       persistence: createMemoryPersistence([codexEntry()]),
       rotationStrategy: "least_used",
       initialToken: null,
       rateLimitBackoffSeconds: 60,
-    });
-    const geminiPool = new GeminiAccountPool({
-      load: () => [geminiEntry()],
-      save: () => {},
     });
     const proxyPool = {
       getAssignment: () => "global",
@@ -74,13 +40,11 @@ describe("proxy assignments provider IDs", () => {
       getAllMasked: () => [],
     } as unknown as ProxyPool;
 
-    const app = createProxyRoutes(proxyPool, accountPool, geminiPool);
+    const app = createProxyRoutes(proxyPool, accountPool);
     const res = await app.request("/api/proxies/assignments");
     const body = await res.json() as { accounts: Array<{ id: string; provider: string }> };
 
     expect(body.accounts.map((a) => a.id)).toContain("codex:acc-1");
-    expect(body.accounts.map((a) => a.id)).toContain("gemini:gem-1");
     expect(body.accounts.map((a) => a.provider)).toContain("codex");
-    expect(body.accounts.map((a) => a.provider)).toContain("gemini");
   });
 });

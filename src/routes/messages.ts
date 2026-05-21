@@ -149,9 +149,11 @@ export function createMessagesRoutes(
       codexRequest.useWebSocket = true;
     }
     const wantThinking = req.thinking?.type === "enabled" || req.thinking?.type === "adaptive";
+    const suffixMatch = req.model.match(/\[(400k|1m)\]$/i);
+    const suffix = suffixMatch ? suffixMatch[0] : "";
     const proxyReq = {
       codexRequest,
-      model: buildDisplayModelName(parseModelName(req.model)),
+      model: buildDisplayModelName(parseModelName(req.model)) + suffix,
       isStreaming: req.stream,
       clientConversationId: clientConversationId ?? undefined,
     };
